@@ -93,11 +93,13 @@ import function
 import custom
 import instruction
 import tools
+import cory
 register_module(database)
 register_module(function)
 register_module(custom)
 register_module(instruction)
 register_module(tools)
+register_module(cory)
 server.register_introspection_functions()
 
 thread = threading.Thread(target=server.serve_forever)
