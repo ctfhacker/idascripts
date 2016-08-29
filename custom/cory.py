@@ -160,3 +160,24 @@ def write_breaks(func=None, tagname='break', append=False):
         f.write(breaks)
 
     print("Writing breaks to {}".format(filename))
+
+def get_bb_id(graph, ea):
+    for block in graph:
+        if block.startEA <= ea and block.endEA > ea:
+            return block.id
+
+def color_block(ea=None):
+    """http://reverseengineering.stackexchange.com/questions/10662/change-block-node-color-with-idapython
+    and WanderingGlitch for the tip of refresh_idaview_anyway()"""
+
+    func_top = fn.top()
+
+    f = idaapi.get_func(ea)
+    g = idaapi.FlowChart(f, flags=idaapi.FC_PREDS)
+    bb_id = get_bb_id(g, ea)
+
+    p = idaapi.node_info_t()
+    p.bg_color = 0x55ff7f
+
+    idaapi.set_node_info2(func_top, bb_id, p, idaapi.NIF_BG_COLOR | idaapi.NIF_FRAME_COLOR)
+    idaapi.refresh_idaview_anyway()
