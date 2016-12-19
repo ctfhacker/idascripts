@@ -1,4 +1,4 @@
-import sys, logging
+import sys,logging
 import operator,functools,itertools
 import collections,heapq,types
 import six,traceback
@@ -59,7 +59,7 @@ class typemap:
 
     # defaults
     @classmethod
-    def __loader_finished__(cls, li, neflags, filetypename):
+    def __kernel_config_loaded__(cls):
         info = idaapi.get_inf_structure()
         bits = 64 if info.is_64bit() else 32 if info.is_32bit() else None
         if bits is None: return
@@ -72,7 +72,7 @@ class typemap:
     @classmethod
     def dissolve(cls, flag, typeid, size):
         dt = flag & cls.FF_MASKSIZE
-        sf = -1 if idaapi.is_signed_data(flag) else +1
+        sf = -1 if flag & idaapi.FF_SIGN == idaapi.FF_SIGN else +1
         if dt == idaapi.FF_STRU and isinstance(typeid,six.integer_types):
             # FIXME: figure out how to fix this recursive module dependency
             t = sys.modules.get('structure', __import__('structure')).instance(typeid) 
@@ -88,7 +88,7 @@ class typemap:
             return [t,count] if count > 1 else t
         # if the size matches, then we assume it's a single element
         elif sz == size:
-            return t,sz
+            return t,(sz*sf)
         # otherwise it's an array
         return [(t,sz*sf),size // sz]
 
@@ -108,7 +108,7 @@ class typemap:
         if isinstance(pythonType, ().__class__):
             (t,sz),count = pythonType,1
             table = cls.typemap[t]
-            flag,typeid = table[sz if t in (int,long,float,type) else t]
+            flag,typeid = table[abs(sz) if t in (int,long,float,type) else t]
             
         elif isinstance(pythonType, [].__class__):
             # an array, which requires us to recurse...
@@ -128,7 +128,7 @@ class typemap:
             opinfo.tid = typeid
             return flag,typeid,idaapi.get_data_type_size(flag, opinfo)
 
-        return flag|(idaapi.signed_data_flag() if sz < 0 else 0),typeid,sz*count
+        return flag|(idaapi.FF_SIGN if sz < 0 else 0),typeid,abs(sz)*count
 
 class priorityhook(object):
     '''Helper class for hooking different parts of IDA.'''
@@ -345,3 +345,59 @@ class address(object):
             return cls.__within2__(*args)
         return cls.__within1__(*args)
 
+class node(object):
+    """Various methods that extract information from the undocumented structures
+    that IDA stores within a Netnode for a given address.
+    """
+    @staticmethod
+    def sup_opstruct(sup, bit64Q):
+        """Given a supval, return the list of the encoded structure/field ids.
+
+        This string is typically found in a supval[0xF+opnum] of the instruction.
+        """
+        le = internal.utils.compose(
+            functools.partial(map, ord),
+            functools.partial(reduce, lambda t,c: (t*0x100)|c)
+        )
+        ror = lambda n,shift,bits: (n>>shift) | ((n&2**shift-1) << (bits-shift))
+
+        # 32-bit
+        # 0001 c0006e92 -- ULARGE_INTEGER
+        # 0002 c0006e92 c0006e98 -- ULARGE_INTEGER.quadpart
+        # 0002 c0006e92 c0006e97 -- ULARGE_INTEGER.u.lowpart
+        # 0002 c0006e92 c0006e96 -- ULARGE_INTEGER.s0.lowpart
+        # (x ^ 0x3f000000)
+
+        def id32(sup):
+            count,res = le(sup[:2]),sup[2:]
+            chunks = zip(*((iter(res),)*4))
+            if len(chunks) != count:
+                raise ValueError('{:s}.op_id -> id32 : Number of chunks does not match count : {:d} : {!r}'.format('.'.join(('internal',__name__)), count, map(''.join, chunks)))
+            res = map(le, chunks)
+            res = map(functools.partial(operator.xor, 0x3f000000), res)
+            return tuple(res)
+
+        # 64-bit
+        # 000002 888e00 889900 -- KEVENT.Header.anonymous_0.anonymous_0.Type
+        # 000002 888e00 889a00 -- KEVENT.Header.anonymous_0.Lock
+        # 000001 888e00        -- KEVENT.Header.anonymous_0
+        # ff0000000000088e -- KEVENT
+        # ff0000000000088f -- DISPATCHER_HEADER
+        # ff00000000000890 -- _DISPATCHER_HEADER::*F98
+        # ff00000000000891 -- _DISPATCHER_HEADER::*F98*0C
+        # (x ^ 0x8000ff) ror 8
+
+        def id64(sup):
+            chunks = zip(*((iter(sup),)*3))
+            count = le(chunks.pop(0))
+            if len(chunks) != count:
+                raise ValueError('{:s}.op_id -> id64 : Number of chunks does not match count : {:d} : {!r}'.format('.'.join(('internal',__name__)), count, map(''.join, chunks)))
+            res = map(le, chunks)
+            res = map(functools.partial(operator.xor, 0x8000ff), res)
+            return tuple(ror(n, 8, 64) for n in res)
+
+        return id64(sup) if bit64Q else id32(sup)
+
+def tuplename(*names):
+    res = ('{:x}'.format(_) if isinstance(_, six.integer_types) else _ for _ in names)
+    return '_'.join(res)

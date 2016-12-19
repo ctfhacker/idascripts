@@ -1,6 +1,16 @@
 ## ida-python specific modules
 import idaapi,ida
 
+## stupid fucking idapython hax
+# prevent idapython from trying to write it's banner to the message window.
+print_banner = lambda: None
+
+# because IDA 6.95 is fucking stupid
+__version__ = map(int,idaapi.get_kernel_version().split('.'))
+__version__[1] = int('{:<02d}'.format(__version__[1]))
+if __version__[0] >= 6 and __version__[1] >= 95:
+    import ida_idaapi, ida_kernwin, ida_diskio
+
 ## contextual modules
 import segment,database,function,instruction
 import structure,enum
@@ -12,13 +22,23 @@ __import__('logging').root.level = __import__('logging').INFO
 
 # shortcuts
 h,top,go,goof = database.h,func.top,database.go,database.goof
-hex = lambda n: '{:x}'.format(n)
+hex = '{:x}'.format
+
+# functional tools
+import functools,itertools,operator
+partial = functools.partial
+compose,box,unbox = map(functools.partial(getattr, __import__('internal').utils), ('compose','box','unbox'))
+identity,first,second,third = map(functools.partial(getattr, __import__('internal').utils), ('identity','first','second','third'))
+fexc,cond = map(functools.partial(getattr, __import__('internal').utils), ('fexc', 'cond'))
+fagg,discard = map(functools.partial(getattr, __import__('internal').utils), ('fagg','discard'))
 
 import tools,ui
 from tools import remote
 
 import custom,app
+### namespace stops here
 
+### begin hooking ida to monitor it's state
 # scope for execution queue and hooks
 ui.queue.__start_ida__(), ui.hook.__start_ida__()
 map(__import__('atexit').register, (ui.queue.__stop_ida__, ui.hook.__stop_ida__))
@@ -27,13 +47,14 @@ map(__import__('atexit').register, (ui.queue.__stop_ida__, ui.hook.__stop_ida__)
 ui.hook.idp.add('init', ui.queue.__open_database__, 0)
 ui.hook.idp.add('term', ui.queue.__close_database__, 0)
 
-# update database state when ida's queues enter various states
-ui.hook.idp.add('init', __import__('hooks').on_init, 0)
-ui.hook.idp.add('loader_finished', __import__('hooks').on_loaded, 0)
-ui.hook.idp.add('auto_empty', __import__('hooks').on_ready, 0)
-
 # setup default integer types for the typemapper once the loader figures everything out
-ui.hook.idp.add('loader_finished', __import__('internal').interface.typemap.__loader_finished__, 0)
+ui.hook.idp.add('kernel_config_loaded', __import__('internal').interface.typemap.__kernel_config_loaded__, 0)
+
+# update database state when ida's enter various states
+ui.hook.idp.add('init', __import__('hooks').on_init, 0)
+ui.hook.idp.add('newfile', __import__('hooks').on_newfile, 0)
+ui.hook.idp.add('oldfile', __import__('hooks').on_oldfile, 0)
+ui.hook.idp.add('auto_empty', __import__('hooks').on_ready, 0)
 
 # create the tagcache netnode in any new database
 ui.hook.idp.add('init', __import__('internal').comment.tagging.__init_tagcache__, 0)
@@ -58,9 +79,6 @@ ui.hook.idb.add('extra_cmt_changed', __import__('hooks').extra_cmt_changed, 40)
 
 # rebase the tagcache if the entire database was rebased.
 ui.hook.idb.add('allsegs_moved', __import__('hooks').rebase, 50)
-
-# prevent idapython from trying to write it's banner to the message window.
-print_banner = lambda: None
 
 #[ ui.hook.ui.add(n, __import__('hooks').notify(n), -100) for n in ('range','idcstop','idcstart','suspend','resume','term','ready_to_run') ]
 #[ ui.hook.idp.add(n, __import__('hooks').notify(n), -100) for n in ('newfile','oldfile','savebase','closebase','init','term','newprc','newasm','loader_finished','loader') ]
