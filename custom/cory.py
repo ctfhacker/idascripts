@@ -166,7 +166,7 @@ def get_bb_id(graph, ea):
         if block.startEA <= ea and block.endEA > ea:
             return block.id
 
-def color_block(ea=None):
+def color_block(ea=None, color=0x55ff7f):
     """http://reverseengineering.stackexchange.com/questions/10662/change-block-node-color-with-idapython
     and WanderingGlitch for the tip of refresh_idaview_anyway()"""
 
@@ -177,7 +177,7 @@ def color_block(ea=None):
     bb_id = get_bb_id(g, ea)
 
     p = idaapi.node_info_t()
-    p.bg_color = 0x55ff7f
+    p.bg_color = color
 
     idaapi.set_node_info2(func_top, bb_id, p, idaapi.NIF_BG_COLOR | idaapi.NIF_FRAME_COLOR)
     idaapi.refresh_idaview_anyway()
