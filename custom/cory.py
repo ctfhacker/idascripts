@@ -181,3 +181,35 @@ def color_block(ea=None, color=0x55ff7f):
 
     idaapi.set_node_info2(func_top, bb_id, p, idaapi.NIF_BG_COLOR | idaapi.NIF_FRAME_COLOR)
     idaapi.refresh_idaview_anyway()
+
+def dump_trace(color=0x55ff7f):
+    """Dump breakpoints for current function to trace to see basic blocks in function
+    The trace dumps a file to F://trace.out.py which should be able to be imported into
+    IDA to color the blocks 
+    """
+    filename = os.path.join('F:\\', 'trace')
+    trace = set()
+
+    try:
+        with open(filename, 'r') as f:
+            curr_trace = f.read().split('\n')
+
+        # Keep trace that is currently written
+        for t in curr_trace:
+            trace.add(t)
+    except IOError:
+        pass
+
+
+    for block in fn.blocks():
+        begin, end = block
+        command = '.logopen E:\\trace.out.py; bp {} ".printf \\"custom.cory.color_block({}, {})\\\\n\\"; g; .logclose;"'.format(eaToReference(begin), hex(begin), hex(color))
+        trace.add(command)
+
+    with open(filename, 'w') as f:
+        for t in trace:
+            f.write(t + '\n')
+        f.write('.logopen E:\\trace.out.py\n')
+
+    print("Writing trace breakpoints to {}".format(filename))
+
