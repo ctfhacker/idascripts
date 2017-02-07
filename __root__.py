@@ -15,7 +15,7 @@ if __version__[0] >= 6 and __version__[1] >= 95:
 import segment,database,function,instruction
 import structure,enum
 
-import database as db,function as func,instruction as ins,structure as struc
+import database as db,function as func,instruction as ins,structure as struc,segment as seg
 
 # default logging that displays any info
 __import__('logging').root.level = __import__('logging').INFO
@@ -27,10 +27,18 @@ hex = '{:x}'.format
 # functional tools
 import functools,itertools,operator
 partial = functools.partial
-compose,box,unbox = map(functools.partial(getattr, __import__('internal').utils), ('compose','box','unbox'))
+fcompose,box,unbox = map(functools.partial(getattr, __import__('internal').utils), ('fcompose','box','unbox'))
 identity,first,second,third = map(functools.partial(getattr, __import__('internal').utils), ('identity','first','second','third'))
-fexc,cond = map(functools.partial(getattr, __import__('internal').utils), ('fexc', 'cond'))
-fagg,discard = map(functools.partial(getattr, __import__('internal').utils), ('fagg','discard'))
+fexception,fcondition = map(functools.partial(getattr, __import__('internal').utils), ('fexception','fcondition'))
+fap,fdiscard = map(functools.partial(getattr, __import__('internal').utils), ('fap','fdiscard'))
+lazy,fcurry = map(functools.partial(getattr, __import__('internal').utils), ('lazy','fcurry'))
+compose,fexc,condition = fcompose,fexception,fcondition
+
+# pattern matching
+AnyRegister = AnyReg = __import__('internal').utils.PatternAnyType(instruction.register_t)
+AnyInteger = AnyInt = __import__('internal').utils.PatternAnyType(__import__('six').integer_types)
+AnyString = AnyStr = __import__('internal').utils.PatternAnyType(basestring)
+Any = _ = __import__('internal').utils.PatternAny()
 
 import tools,ui
 from tools import remote
@@ -79,6 +87,9 @@ ui.hook.idb.add('extra_cmt_changed', __import__('hooks').extra_cmt_changed, 40)
 
 # rebase the tagcache if the entire database was rebased.
 ui.hook.idb.add('allsegs_moved', __import__('hooks').rebase, 50)
+
+# switch the instruction set
+ui.hook.idp.add('newprc', instruction.__newprc__, 50)
 
 #[ ui.hook.ui.add(n, __import__('hooks').notify(n), -100) for n in ('range','idcstop','idcstart','suspend','resume','term','ready_to_run') ]
 #[ ui.hook.idp.add(n, __import__('hooks').notify(n), -100) for n in ('newfile','oldfile','savebase','closebase','init','term','newprc','newasm','loader_finished','loader') ]

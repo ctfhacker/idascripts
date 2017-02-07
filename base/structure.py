@@ -227,8 +227,59 @@ def fragment(id, offset, size):
         (m_offset,m_size),(m_name,m_cmt,m_rcmt) = member.next()
         yield (m_offset,m_size),(m_name,m_cmt,m_rcmt)
         size -= m_size
-
     return
+
+@utils.multicase(ea=six.integer_types, st=__structure_t)
+def apply(ea, st):
+    '''Apply the structure ``st`` to the address at ``ea``.'''
+    ea = interface.address.inside(ea)
+    ti, fl = idaapi.opinfo_t(), database.type.flags(ea)
+    res = idaapi.get_opinfo(ea, 0, fl, ti)
+    ti.tid = st.id
+    return idaapi.set_opinfo(ea, 0, fl | idaapi.struflag(), ti)
+@utils.multicase(id=six.integer_types)
+def apply(id):
+    '''Apply the structure identified by ``id`` to the current address.'''
+    return apply(ui.current.address(), instance(id))
+@utils.multicase(st=__structure_t)
+def apply(st):
+    '''Apply the structure ``st`` to the current address.'''
+    return apply(ui.current.address(), st)
+@utils.multicase(ea=six.integer_types, id=six.integer_types)
+def apply(ea, id):
+    '''Apply the structure identified by ``id`` to the address at ``ea``.'''
+    return apply(ea, instance(id))
+
+@utils.multicase(ea=six.integer_types, opnum=six.integer_types, id=six.integer_types)
+def apply_op(id, ea, opnum, **delta):
+    """Apply the structure identified by ``id`` to the instruction operand ``opnum`` at the address ``ea``.
+    If the offset ``delta`` is specified, shift the structure by that amount.
+    """
+    ea = interface.address.inside(ea)
+    if not database.type.is_code(ea):
+        raise TypeError('{:s}.apply_op({:x}, {:x}, {:d}, delta={:d}) : Item type at requested address is not code.'.format(__name__, id, ea, opnum, delta.get('delta', 0)))
+    tid = idaapi.tid_array(1)
+    tid[0] = id
+    ok = idaapi.op_stroff(ea, opnum, tid, len(tid), delta.get('delta', 0))
+    return True if ok else False
+@utils.multicase(ea=six.integer_types, opnum=six.integer_types, st=__structure_t)
+def apply_op(st, ea, opnum, **delta):
+    """Apply the structure ``st`` to the instruction operand ``opnum`` at the address ``ea``.
+    If the offset ``delta`` is specified, shift the structure by that amount.
+    """
+    return apply_op(st.id, ea, opnum, **delta)
+@utils.multicase(opnum=six.integer_types, st=__structure_t)
+def apply_op(st, opnum, **delta):
+    """Apply the structure ``st`` to the instruction operand ``opnum`` at the current address.
+    If the offset ``delta`` is specified, shift the structure by that amount.
+    """
+    return apply_op(st.id, ui.current.address(), opnum, **delta)
+@utils.multicase(opnum=six.integer_types, st=__structure_t)
+def apply_op(id, opnum, **delta):
+    """Apply the structure identified by ``id`` to the instruction operand ``opnum`` at the current address.
+    If the offset ``delta`` is specified, shift the structure by that amount.
+    """
+    return apply_op(id, ui.current.address(), opnum, **delta)
 
 def get(name):
     '''Returns an instance of the structure named ``name``.'''
@@ -621,17 +672,17 @@ class members_t(object):
     nearoffset = nearOffset = utils.alias(near_offset, 'members_t')
 
     # adding/removing members
-    @utils.multicase(name=basestring)
+    @utils.multicase(name=(basestring,tuple))
     def add(self, name):
         '''Append the specified member ``name`` with the default type at the end of the structure.'''
         offset = self.owner.size + self.baseoffset
         return self.add(name, int, offset)
-    @utils.multicase(name=basestring)
+    @utils.multicase(name=(basestring,tuple))
     def add(self, name, type):
         '''Append the specified member ``name`` with the given ``type`` at the end of the structure.'''
         offset = self.owner.size + self.baseoffset
         return self.add(name, type, offset)
-    @utils.multicase(name=basestring, offset=six.integer_types)
+    @utils.multicase(name=(basestring,tuple), offset=six.integer_types)
     def add(self, name, type, offset):
         """Add a member at ``offset`` with the given ``name`` and ``type``.
         To specify a particular size, ``type`` can be a tuple with the second element referring to the size.
@@ -642,27 +693,29 @@ class members_t(object):
         opinfo = idaapi.opinfo_t()
         opinfo.tid = typeid
         realoffset = offset - self.baseoffset
-        realoffset_repr = '-0x{:x}'.format(abs(realoffset)) if realoffset < 0 else '0x{:x}'.format(realoffset)
+
         if name is None:
-            logging.warn('{:s}.instance({:s}).members.add : name is undefined, defaulting to offset {:s}'.format(__name__, self.owner.name, realoffset_repr))
-            name = 'v_{:s}'.format(realoffset)
+            logging.warn('{:s}.instance({:s}).members.add : name is undefined, defaulting to offset {:+#x}'.format(__name__, self.owner.name, realoffset))
+            name = 'v', realoffset
+        if isinstance(name, tuple):
+            name = interface.tuplename(*name)
 
         res = idaapi.add_struc_member(self.owner.ptr, name, realoffset, flag, opinfo, nbytes)
         if res == idaapi.STRUC_ERROR_MEMBER_OK:
-            logging.info('{:s}.instance({:s}).members.add : idaapi.add_struc_member(sptr={!r}, fieldname={:s}, offset={:s}, flag=0x{:x}, mt=0x{:x}, nbytes=0x{:x}) : Success'.format(__name__, self.owner.name, self.owner.name, name, realoffset_repr, flag, typeid, nbytes))
+            logging.info('{:s}.instance({:s}).members.add : idaapi.add_struc_member(sptr={!r}, fieldname={:s}, offset={:+#x}, flag=0x{:x}, mt=0x{:x}, nbytes=0x{:x}) : Success'.format(__name__, self.owner.name, self.owner.name, name, realoffset, flag, typeid, nbytes))
         else:
             error = {
                 idaapi.STRUC_ERROR_MEMBER_NAME : 'Duplicate field name',
                 idaapi.STRUC_ERROR_MEMBER_OFFSET : 'Invalid offset',
                 idaapi.STRUC_ERROR_MEMBER_SIZE : 'Invalid size',
             }
-            callee = 'idaapi.add_struc_member(sptr={!r}, fieldname={:s}, offset={:s}, flag=0x{:x}, mt=0x{:x}, nbytes=0x{:x})'.format(self.owner.name, name, realoffset_repr, flag, typeid, nbytes)
+            callee = 'idaapi.add_struc_member(sptr={!r}, fieldname={:s}, offset={:+#x}, flag=0x{:x}, mt=0x{:x}, nbytes=0x{:x})'.format(self.owner.name, name, realoffset, flag, typeid, nbytes)
             logging.fatal(' : '.join(('members_t.add', callee, error.get(res, 'Error code 0x{:x}'.format(res)))))
             return None
 
         res = idaapi.get_member(self.owner.ptr, realoffset)
         if res is None:
-            logging.fatal("{:s}.instance({:s}.members.add : Failed creating member {!r} {:s}:+0x{:x}".format(__name__, self.owner.name, name, realoffset_repr, nbytes))
+            logging.fatal("{:s}.instance({:s}.members.add : Failed creating member {!r} {:s}:{:+#x}".format(__name__, self.owner.name, name, realoffset, nbytes))
 
         # sloppily figure out what the correct index is
         idx = self.index( idaapi.get_member(self.owner.ptr, realoffset) )
@@ -887,3 +940,7 @@ class member_t(object):
             ops = (idx for idx,ids in ops if self.__owner.id in ids)
             res.extend( (ea,op,Ref_T.get(t,'')) for op in ops)
         return tuple(res)
+
+#strpath_t
+#op_stroff(ea, n, tid_t* path, int path_len, adiff_t delta)
+#get_stroff_path(ea, n, tid_t* path, adiff_t delta)
