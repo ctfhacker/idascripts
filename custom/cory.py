@@ -4,6 +4,10 @@ import database as db,function as fn,instruction as ins, structure as struc
 import idaapi
 import logging
 import os
+import copy
+from collections import namedtuple
+
+func = fn
 
 def windbgescape(result):
     result = result.replace("\\", "\\\\")
@@ -182,7 +186,7 @@ def color_block(ea=None, color=0x55ff7f):
     idaapi.set_node_info2(func_top, bb_id, p, idaapi.NIF_BG_COLOR | idaapi.NIF_FRAME_COLOR)
     idaapi.refresh_idaview_anyway()
 
-def dump_trace(color=0x55ff7f):
+def dump_trace(here, color=0x55ff7f):
     """Dump breakpoints for current function to trace to see basic blocks in function
     The trace dumps a file to F://trace.out.py which should be able to be imported into
     IDA to color the blocks 
@@ -201,9 +205,10 @@ def dump_trace(color=0x55ff7f):
         pass
 
 
-    for block in fn.blocks():
+    print("Here: {}, color: {}".format(hex(here), hex(color)))
+    for block in fn.blocks(here):
         begin, end = block
-        command = '.logopen E:\\trace.out.py; bp {} ".printf \\"custom.cory.color_block({}, {})\\\\n\\"; g; .logclose;"'.format(eaToReference(begin), hex(begin), hex(color))
+        command = 'bp {} ".printf \\"custom.cory.color_block({}, {})\\\\n\\"; g;"'.format(eaToReference(begin), hex(begin), hex(color))
         trace.add(command)
 
     with open(filename, 'w') as f:
@@ -213,3 +218,287 @@ def dump_trace(color=0x55ff7f):
 
     print("Writing trace breakpoints to {}".format(filename))
 
+def search_dyn_calls(addr, curr_addr_list=None, parents=None):
+    dyn_call = namedtuple('dyn_call', ['call', 'parents'])
+    hex = '{:x}'.format
+
+    # print(hex(addr), curr_addr_list)
+    if curr_addr_list == None:
+        curr_addr_list = [addr]
+
+    if parents == None:
+        parents = []
+
+    calls = []
+
+    #print("Addr: {}".format(addr))
+    for ea in fn.iterate(addr):
+        if not ins.isCall(ea):
+            continue
+
+        call = ins.op_value(ea, 0)
+
+        # Don't cycle ourselves
+        if call == addr:
+            # print("Ignoring recursive loop on function: {}".format(hex(addr)))
+            continue
+
+        # Don't call functions we are currently looking into
+        if call in curr_addr_list:
+            continue
+
+        """
+        .text:3F6E66AD 0B4                 call    ds:memmove
+        Python>x = ins.op_value(h(), 0)
+        Python>print(x.base)
+        None
+        .text:3F6E6208 008                 call    dword ptr [eax]
+        Python>x.base
+        <instruction.register.eax(0,dt_dword) 'eax' 0:+32>
+        """
+        # we want non int/long for calls
+        if isinstance(call, (int, long)) and not ins.op_type(ea, 0) in ('phrase'):
+            # Only now call the function once
+            curr_addr_list.append(call)
+            new_parents = copy.deepcopy(parents)
+            new_parents.append(ea)
+            calls.extend(search_dyn_call(call, curr_addr_list=curr_addr_list, parents=new_parents))
+        elif isinstance(call, ins.intelop.OffsetBaseIndexScale) and call.base == None:
+            # Ignore 'call ds:memmove' or 'call ds:atoi'
+            # print("OffsetBase", call.offset, hex(ea)[2:-1], db.disasm(ea), parents)
+            pass
+        else:
+            calls.append(dyn_call(ea, parents))
+
+    return calls
+"""Aliases"""
+search_dyn_call = search_dyn_calls
+
+
+def _search_func(addr, func, curr_addr_list=None):
+    if curr_addr_list == None:
+        curr_addr_list = [addr]
+
+    for ea in fn.iterate(addr):
+
+        func(ea)
+
+        if not ins.isCall(ea):
+            continue
+
+        call = ins.op_value(ea, 0)
+
+        # Don't cycle ourselves
+        if call == addr:
+            # print("Ignoring recursive loop on function: {}".format(hex(addr)))
+            continue
+
+        # Try to know if the call operand is a valid address
+        # Bail if not.. 
+        if not isinstance(call, (int, long)):
+            continue
+        """
+        try:
+            x = hex(call)
+        except:
+            continue
+        """
+
+        # Don't call functions we are currently looking into
+        if call in curr_addr_list:
+            continue
+
+        # Only now ca
+        curr_addr_list.append(call)
+        _search_func(call, func, curr_addr_list=curr_addr_list)
+
+def search_func(addr, funcname, curr_addr_list=None):
+    """
+    Given an address and function name, recursively look from the given address
+    for calls to the given function name. Modifies the 'calls' function tag with
+    the function name and True or False depending if the function contains the wanted
+    function or not.
+    """
+    if curr_addr_list == None:
+        curr_addr_list = [addr]
+
+    print("Addr: {}".format(addr))
+    curr_calls = fn.tag(addr).get('calls', {})
+    for ea in fn.iterate(addr):
+        if funcname in db.disasm(ea):
+            curr_calls[funcname] = True
+            fn.tag(addr, 'calls', curr_calls)
+            return True
+
+        if not ins.isCall(ea):
+            continue
+
+        call = ins.op_value(ea, 0)
+
+        # Don't cycle ourselves
+        if call == addr:
+            print("Ignoring recursive loop on function: {}".format(hex(addr)))
+            continue
+
+        # Try to know if the call operand is a valid address
+        # Bail if not.. 
+        try:
+            print(hex(call))
+        except:
+            continue
+
+        # Check if this function has been analyzed already
+        # and return the result
+        # Cannot return False, because that will exit the loop and not 
+        # continue to iterate over the rest of the instrutions in the function
+        call_cache = fn.tag(call).get('calls', {})
+        print("Call cache: {}".format(call_cache))
+        if funcname in call_cache:
+            if call_cache[funcname]:
+                curr_calls[funcname] = call_cache[funcname]
+                fn.tag(addr, 'calls', curr_calls)
+                return True
+
+        # Don't call functions we are currently looking into
+        if call in curr_addr_list:
+            continue
+
+        # Only now ca
+        curr_addr_list.append(call)
+        search_func(call, funcname=funcname, curr_addr_list=curr_addr_list)
+
+    curr_calls[funcname] = False
+    fn.tag(addr, 'calls', curr_calls)
+    return False
+
+def search_malloc(addr, funcname='malloc', curr_addr_list=None):
+    # print(hex(addr), curr_addr_list)
+    if curr_addr_list == None:
+        curr_addr_list = [addr]
+
+    print("Addr: {}".format(addr))
+    curr_calls = fn.tag(addr).get('calls', {})
+    for ea in fn.iterate(addr):
+        if not ins.isCall(ea):
+            continue
+
+        if ins.op_type(0) == 'reg':
+            """
+            Handle this case - malloc(100)
+            mov ebp, ds:malloc
+            push 100
+            call ebp
+            """
+
+        if funcname in db.disasm(ea):
+            # Push before malloc "should" be within 20 instructions
+            """
+            Handle this case - malloc(100)
+            push 100
+            mov eax, 10
+            mov ebx, 20
+            call malloc
+            """
+            search_addr = db.prev(ea)
+            for _ in range(20):
+                if ins.mnem(search_addr) == 'push':
+                    break
+                search_addr = db.prev(search_addr)
+
+            print("FOUND PUSH FOR MALLOC: {}".format(hex(search_addr)))
+            malloc_value = ins.op_value(search_addr, 0)
+            if isinstance(malloc_value, (int, long)):
+                curr_calls[funcname] = malloc_value
+            else:
+                curr_calls[funcname] = 'variable'
+
+            fn.tag(addr, 'calls', curr_calls)
+            return True
+
+        call = ins.op_value(ea, 0)
+
+        # Don't cycle ourselves
+        if call == addr:
+            print("Ignoring recursive loop on function: {}".format(hex(addr)))
+            continue
+
+        # Try to know if the call operand is a valid address
+        # Bail if not.. 
+        try:
+            print(hex(call))
+        except:
+            continue
+
+        # Check if this function has been analyzed already
+        # and return the result
+        # Cannot return False, because that will exit the loop and not 
+        # continue to iterate over the rest of the instrutions in the function
+        call_cache = fn.tag(call).get('calls', {})
+        print("Call cache: {}".format(call_cache))
+        if funcname in call_cache:
+            if call_cache[funcname]:
+                curr_calls[funcname] = call_cache[funcname]
+                fn.tag(addr, 'calls', curr_calls)
+                return True
+
+        # Don't call functions we are currently looking into
+        if call in curr_addr_list:
+            continue
+
+        # Only now ca
+        curr_addr_list.append(call)
+        search_malloc(call, funcname=funcname, curr_addr_list=curr_addr_list)
+
+    curr_calls[funcname] = False
+    fn.tag(addr, 'calls', curr_calls)
+    return False
+
+def apply_dyn_calls(dyn_calls, delete=False):
+    hex = '{:x}'.format
+    for dyn_call in dyn_calls:
+        print(dyn_call)
+        for i,p in enumerate(dyn_call.parents):
+            print(i, hex(p))
+            top = func.top(p)
+            if 'dynamic_call' not in func.tag(top): fn.tag(top, 'dynamic_call', set())
+            if delete:
+                fn.tag(top,'dynamic_call', None)
+                continue
+            curr_tag = fn.tag(top, 'dynamic_call')
+            print(type(curr_tag), hex(top))
+            try:
+                curr_tag.add(dyn_call.parents[i+1])
+            except IndexError:
+                curr_tag.add(dyn_call.call)
+            fn.tag(top, 'dynamic_call', curr_tag)
+
+        # Be sure to tag the actual function containing the dynamic call
+        top = fn.top(dyn_call.call)
+        if delete:
+            if 'dynamic_call' in fn.tag(top):
+                fn.tag(top, 'dynamic_call', None)
+            if 'dynamic_call' in fn.tag(dyn_call.call):
+                fn.tag(dyn_call.call, 'dynamic_call', None)
+            continue
+
+        if 'dynamic_call' not in fn.tag(top): fn.tag(top, 'dynamic_call', set())
+        curr_tag = fn.tag(top, 'dynamic_call')
+        curr_tag.add(dyn_call.call)
+        fn.tag(top, 'dynamic_call', curr_tag)
+        db.tag(dyn_call.call, 'dynamic_call', 'here')
+
+def mov_search(addr):
+    def check(ea):
+        if 'mov' not in db.disasm(ea) or 'offset' not in db.disasm(ea):
+            return
+        if ins.ops_type(ea) != ['phrase', 'immediate']:
+            return
+        if ins.op_value(ea, 0).offset != 0:
+            return
+
+        print(hex(ea), db.disasm(ea), ins.ops_type())
+
+    _search_func(addr, func=check)
+        
+
+        
