@@ -21,6 +21,7 @@ def eaToLabel(ea):
 def eaToReference(ea):
     return '{:s}+{:x}'.format(db.module(),db.offset(ea))
 
+"""
 def dump_breaks(func=None, tagname='break', stdout=True):
     if func is None:
         for func,_ in db.selectcontents(tagname):
@@ -61,6 +62,7 @@ def dump_breaks(func=None, tagname='break', stdout=True):
             print(curr_break)
 
     return '\n' + '\n'.join(output) + '\n'
+"""
 
 def write_breaks(func=None, tagname='break', append=False):
     breaks = dump_breaks(func=func, tagname=tagname, stdout=False)
@@ -123,6 +125,9 @@ def dump_breaks(func=None, tagname='break', stdout=True):
             print(breakpoint)
 
         output.append(breakpoint)
+
+    if len(output) == 1:
+        return output[0] + '\n'
 
     return '\n'.join(output)
     
@@ -500,5 +505,105 @@ def mov_search(addr):
 
     _search_func(addr, func=check)
         
+def isRecord(x, count=5):
+    """
+    Recurses up `count` times and return all the function addresses
+    """
+    xrefs = set(func.up(x))
+    for _ in xrange(count):
+        tmp = set()
+        for x in xrefs:
+            try:
+                map(tmp.add, func.up(x))
+            except LookupError:
+                pass
+        map(xrefs.add, tmp)
+    return xrefs
 
-        
+def recurse(x, f, count=5):
+    marked = set()
+
+    try:
+        xrefs = set(f(x))
+    except LookupError:
+        return set()
+
+    for _ in xrange(count):
+        tmp = set()
+        for x in xrefs:
+            if x in marked:
+                continue
+
+            marked.add(x)
+            try:
+                map(tmp.add, f(x))
+            except LookupError:
+                pass
+
+        map(xrefs.add, tmp)
+    return xrefs
+
+def recurseDown(x, count=5):
+    return recurse(x, f=func.down, count=count)
+    
+def recurseUp(x, count=5):
+    return recurse(x, f=func.up, count=count)
+
+def tryRecord(ea, count):
+    names = []
+    for x in recurseUp(ea, count):
+        try:
+            curr_func = func.name(x)
+        except LookupError:
+            continue
+
+        if 'record' not in curr_func:
+            continue
+        for y in recurseDown(x, 1):
+            try:
+                curr_name = func.name(y)
+                if 'constructor' in curr_name.lower():
+                    names.append({'malloc_in': func.name(ea), 'record':curr_func, 'constructor':curr_name})
+            except:
+                pass
+
+    # names = [x for x in names if 'constructor' in x.lower()]
+    # if names:
+    return names
+
+def findMallocs(addr):
+    """
+    Recurses down from a function and looks for malloc calls
+    """
+    mallocs = []
+    for y in recurseDown(addr, 5):
+        try:
+            for x in func.iterate(y):
+                dis = db.disasm(x)
+                if 'call' in dis:
+                    if 'malloc' in dis or 'JSFC_729' in dis:
+                        mallocs.append(x)
+        except LookupError:
+            pass
+
+    return mallocs
+
+def breakMallocs(addr):
+    breaks = ''
+    mallocs = findMallocs(addr)
+    for m in mallocs:
+        db.tag(m, 'break', '.printf "{} - {} - malloc(0x%x) - ",poi(esp);g {};.printf "0x%x\\n",@eax;g'.format(hex(m), db.disasm(m), hex(db.next(m))[:-1]))
+        # db.tag(m, 'break', '.printf "{} - {} - malloc(0x%x) - ",poi(esp);'.format(hex(m), db.disasm(m)))
+        breaks += dump_breaks(m, stdout=False)
+        db.tag(m, 'break', None)
+
+    print('Writing breaks to F:\\bps')
+    with open('F:\\bps', 'wb') as f:
+        f.write(breaks)
+
+def find6b(h):
+    for f in func.down(h):
+        for ea in func.iterate(f):
+            for opnum in ins.ops_count(ea):
+                if ins.op_type(ea, opnum) == 'phrase' and ins.op(ea, opnum).offset == 0x6b:
+                    print(db.disasm(ea))
