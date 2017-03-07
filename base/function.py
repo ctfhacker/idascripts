@@ -1487,6 +1487,19 @@ def flow(func):
     fc = idaapi.FlowChart(f=fn, flags=idaapi.FC_PREDS)
     return fc
 
+@utils.multicase()
+def loops():
+    '''Return number of loops for the current function'''
+    return loops(ui.current.function())
+
+@utils.multicase()
+def loops(func):
+    '''Return number of loops at function ``func``'''
+    import networkx as nx
+    fn = by(func)
+    g = blocks.nx(fn)
+    return len(list(nx.simple_cycles(g)))
+
 # FIXME: document this
 #def refs(func, member):
 #    xl, fn = idaapi.xreflist_t(), by(func)
