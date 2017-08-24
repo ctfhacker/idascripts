@@ -6,6 +6,7 @@ import logging
 import os
 import copy
 from collections import namedtuple
+import re
 
 func = fn
 
@@ -550,6 +551,12 @@ def recurseUp(x, count=5):
     return recurse(x, f=func.up, count=count)
 
 def tryRecord(ea, count):
+    """
+    Given a malloc address, traverse upwards until a 'record' function name is found.
+    Once found, recurse downwards looking for 'constructor' function name.
+    If found, this record could be of great use
+    """
+
     names = []
     for x in recurseUp(ea, count):
         try:
@@ -607,3 +614,89 @@ def find6b(h):
             for opnum in ins.ops_count(ea):
                 if ins.op_type(ea, opnum) == 'phrase' and ins.op(ea, opnum).offset == 0x6b:
                     print(db.disasm(ea))
+
+# Dlink DIR-601
+def get_request_commands(h):
+    funcs = []
+    for x in func.iterate(h):
+        if 'strcmp' in db.disasm(x):
+            for count in xrange(10):
+                if 'addi' in db.disasm(db.next(x, count)):
+                    try: 
+                        addr = db.next(x, count)
+                        command = db.disasm(addr).split('"')[1]
+                        break
+                    except:
+                        pass
+            else:
+                print("No addi instr found after strcmp at {}".format(hex(x)))
+                continue
+
+            for count in xrange(20):
+                curr_addr = db.next(addr, count)
+                curr_inst = db.disasm(curr_addr) 
+                if 'la' in curr_inst and 't9' in curr_inst:
+                    command_func = db.disasm(curr_addr).split(', ')[1]
+                    if command_func == 'strcmp':
+                        continue
+
+                    funcs.append(command_func)
+                    break
+            else:
+                print("No la $t9 found after {}".format(db.disasm(addr)))
+
+    return funcs
+
+# Dlink DIR-601
+def tag_command_funcs(funcs):
+    for f in funcs:
+        print(f)
+        inner_funcs = set()
+        for ins in func.iterate(f):
+            curr_ins = db.disasm(ins)
+            if 't9' in curr_ins and 'la' in curr_ins:
+                inner_funcs.add(curr_ins.split(', ')[1])
+
+        print(inner_funcs)
+
+def find_qmemcpy():
+    hex = '{:x}'.format
+    for f in db.functions.iterate():
+        try:
+            res = idaapi.decompile(f)
+            qmemcpys = [x for x in re.findall('printf\(.*?;', str(res)) if 'sizeof' not in x]
+            # heads = re.findall('::Next', str(res))
+            if not qmemcpys:
+                continue
+            print(hex(f), func.name(f))
+            for q in qmemcpys:
+                print(q)
+        except:
+            pass
+
+# Natus
+def get_commands():
+    for f in db.xref.code(0x44c8f8):
+        prev_instr = db.prev(f)
+        d = db.disasm(prev_instr)
+        try:
+            with open('C:\\Windows\\Temp\\commands', 'a') as f:
+                f.write(d.split('.')[1] + '\n')
+        except:
+            print(d)
+
+
+def decompile_funcs():
+    data = open("G:\\targets\\blender\\done_decompile", 'r').read()
+    for f in db.functions.iterate():
+        try:
+            if str(f) in data:
+                continue
+            res = idaapi.decompile(f)
+            with open("G:\\targets\\blender\\done_decompile", "a") as new_file:
+                new_file.write(str(f) + '\n')
+            filename = "G:\\targets\\blender\\decompiles\\{}".format(func.name(f))
+            with open(filename, "wb") as new_file:
+                new_file.write(str(res))
+        except Exception as e:
+            print("ERROR: {} - {}".format(func.name(f), e))
