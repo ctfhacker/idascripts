@@ -144,6 +144,10 @@ class priorityhook(object):
         self.__disabled = set()
         self.__traceback = {}
 
+    def remove(self):
+        '''Unhook the object completely.'''
+        return self.object.unhook()
+
     def enable(self, name):
         '''Enable any hooks for the ``name`` event that have been previously disabled.'''
         if name not in self.__disabled:
@@ -175,7 +179,7 @@ class priorityhook(object):
         if not ok:
             logging.debug('{:s}.{:s}.cycle : Error trying to unhook object. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, object))
 
-        namespace = { name : self.__new(name) for name in self.__cache.viewkeys() }
+        namespace = { name : self._new_(name) for name in self.__cache.viewkeys() }
         res = type(object.__class__.__name__, (self.__type__,), namespace)
         object = res()
 
@@ -187,7 +191,7 @@ class priorityhook(object):
     def add(self, name, function, priority=50):
         '''Add a hook for the event ``name`` to call the requested ``function`` at the given ``priority (lower is prioritized).'''
         if name not in self.__cache:
-            res = self.__new(name)
+            res = self._new_(name)
             setattr(self.object, name, res)
         self.discard(name, function)
 
@@ -208,7 +212,7 @@ class priorityhook(object):
         '''Discard the specified ``function`` from hooking the event ``name``.'''
         if not hasattr(self.object, name):
             cls = self.__class__
-            raise AttributeError('{:s}.{:s}.add : Unable to add a method to hooker for unknown method. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, name))
+            raise AttributeError("{:s}.add({!r}, {!r}) : Unable to add a method to hooker for unknown method.".format('.'.join(('internal',__name__,cls.__name__)), name, function))
         if name not in self.__cache: return False
 
         res, found = [], 0
@@ -223,11 +227,11 @@ class priorityhook(object):
 
         return True if found else False
 
-    def __new(self, name):
+    def _new_(self, name):
         '''Overwrite the hook ``name`` with a priorityhook.'''
         if not hasattr(self.object, name):
             cls = self.__class__
-            raise AttributeError('{:s}.{:s}.__new : Unable to create a hook for unknown method. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, name))
+            raise AttributeError("{:s}._new_({!r}) : Unable to create a hook for unknown method.".format('.'.join(('internal',__name__,cls.__name__)), name))
 
         def method(hookinstance, *args):
             if name in self.__cache and name not in self.__disabled:
@@ -255,7 +259,7 @@ class priorityhook(object):
                     elif res == self.STOP:
                         break
                     cls = self.__class__
-                    raise TypeError('{:s}.{:s}.callback : Unable to determine result type. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, res))
+                    raise TypeError("{:s}.callback : Unable to determine result type. : {!r}".format('.'.join(('internal',__name__,cls.__name__)), res))
 
             supermethod = getattr(super(hookinstance.__class__, hookinstance), name)
             return supermethod(*args)
@@ -285,6 +289,7 @@ class address(object):
     def __head1__(cls, ea):
         # Ensures that ``ea`` is pointing to a valid address
         entryframe = cls.pframe()
+
         res = idaapi.get_item_head(ea)
         if res != ea:
             logging.warn("{:s} : Address {:x} not aligned to the beginning of an item. Fixing it to {:x}.".format(entryframe.f_code.co_name, ea, res))
@@ -292,7 +297,9 @@ class address(object):
         return ea
     @classmethod
     def __head2__(cls, start, end):
+        # Ensures that both ``start`` and ``end`` are pointing to valid addresses
         entryframe = cls.pframe()
+
         res_start, res_end = idaapi.get_item_head(start), idaapi.get_item_head(end)
         # FIXME: off-by-one here, as end can be the size of the db.
         if res_start != start:
@@ -311,11 +318,20 @@ class address(object):
     @classmethod
     def __inside1__(cls, ea):
         # Ensures that ``ea`` is within the database and pointing at a valid address
+        entryframe = cls.pframe()
+
+        if not isinstance(ea, six.integer_types):
+            raise TypeError("{:s} : Specified address is not of the correct type. : {!r} -> {!r}".format(entryframe.f_code.co_name, ea, ea.__class__))
         res = cls.within(ea)
         return cls.head(res)
     @classmethod
     def __inside2__(cls, start, end):
+        # Ensures that both ``start`` and ``end`` are within the database and pointing at a valid address
+
+        entryframe = cls.pframe()
         start, end = cls.within(start, end)
+        if not isinstance(start, six.integer_types) or not isinstance(end, six.integer_types):
+            raise TypeError("{:s} : Specified addresses are not of the correct type. : ({!r}, {!r}) -> ({!r}, {!r})".format(entryframe.f_code.co_name, start, end, start.__class__, end.__class__))
         return cls.head(start, end)
     @classmethod
     def inside(cls, *args):
@@ -327,13 +343,22 @@ class address(object):
     def __within1__(cls, ea):
         # Ensures that ``ea`` is within the database
         entryframe = cls.pframe()
+
+        if not isinstance(ea, six.integer_types):
+            raise TypeError("{:s} : Specified address is not of the correct type. : {!r} -> {!r}".format(entryframe.f_code.co_name, ea, ea.__class__))
+
         if not cls.__within__(ea):
             l, r = cls.__bounds__()
             raise StandardError("{:s} : Address {:x} not within bounds of database ({:x} - {:x}.)".format(entryframe.f_code.co_name, ea, l, r))
         return ea
     @classmethod
     def __within2__(cls, start, end):
+        # Ensures that both ``start`` and ``end`` are within the database
         entryframe = cls.pframe()
+
+        if not isinstance(start, six.integer_types) or not isinstance(end, six.integer_types):
+            raise TypeError("{:s} : Specified addresses are not of the correct type. : ({!r}, {!r}) -> ({!r}, {!r})".format(entryframe.f_code.co_name, start, end, start.__class__, end.__class__))
+
         # FIXME: off-by-one here, as end can be the size of the db.
         if any(not cls.__within__(ea) for ea in (start,end-1)):
             l, r = cls.__bounds__()
@@ -372,28 +397,32 @@ class node(object):
             count,res = le(sup[:2]),sup[2:]
             chunks = zip(*((iter(res),)*4))
             if len(chunks) != count:
-                raise ValueError('{:s}.op_id -> id32 : Number of chunks does not match count : {:d} : {!r}'.format('.'.join(('internal',__name__)), count, map(''.join, chunks)))
+                raise ValueError("{:s}.op_id('{:s}') -> id32 : Number of chunks does not match count : {:d} : {!r}".format('.'.join(('internal',__name__)), sup.encode('hex'), count, map(''.join, chunks)))
             res = map(le, chunks)
             res = map(functools.partial(operator.xor, 0x3f000000), res)
             return tuple(res)
 
         # 64-bit
-        # 000002 888e00 889900 -- KEVENT.Header.anonymous_0.anonymous_0.Type
-        # 000002 888e00 889a00 -- KEVENT.Header.anonymous_0.Lock
-        # 000001 888e00        -- KEVENT.Header.anonymous_0
+        # 000002 c000888e00 c000889900 -- KEVENT.Header.anonymous_0.anonymous_0.Type
+        # 000002 c000888e00 c000889a00 -- KEVENT.Header.anonymous_0.Lock
+        # 000001 c000888e00        -- KEVENT.Header.anonymous_0
+        # 000001 c002bdc400
         # ff0000000000088e -- KEVENT
         # ff0000000000088f -- DISPATCHER_HEADER
         # ff00000000000890 -- _DISPATCHER_HEADER::*F98
         # ff00000000000891 -- _DISPATCHER_HEADER::*F98*0C
-        # (x ^ 0x8000ff) ror 8
+        # (x ^ 0xc0000000ff) ror 8
 
         def id64(sup):
-            chunks = zip(*((iter(sup),)*3))
-            count = le(chunks.pop(0))
+            iterable = iter(sup)
+            #chunks = zip(*((iter(sup),)*3))
+            count = le((next(iterable), next(iterable), next(iterable)))
+            chunks = zip(*((iterable,)*5))
+            #count = le(chunks.pop(0))
             if len(chunks) != count:
-                raise ValueError('{:s}.op_id -> id64 : Number of chunks does not match count : {:d} : {!r}'.format('.'.join(('internal',__name__)), count, map(''.join, chunks)))
+                raise ValueError("{:s}.op_id('{:s}') -> id64 : Number of chunks does not match count : {:d} : {!r}".format('.'.join(('internal',__name__)), sup.encode('hex'), count, map(''.join, chunks)))
             res = map(le, chunks)
-            res = map(functools.partial(operator.xor, 0x8000ff), res)
+            res = map(functools.partial(operator.xor, 0xc0000000ff), res)
             return tuple(ror(n, 8, 64) for n in res)
 
         return id64(sup) if bit64Q else id32(sup)
@@ -401,3 +430,110 @@ class node(object):
 def tuplename(*names):
     res = ('{:x}'.format(abs(n)) if isinstance(n, six.integer_types) else n for n in names)
     return '_'.join(res)
+
+# copied mostly from the collections.namedtuple template
+class namedtypedtuple(tuple):
+    '''A subclass of tuple with named fields.'''
+    _fields = ()
+    _types = ()
+
+    def __new__(cls, *args):
+        res = args[:]
+        for n,t,x in zip(cls._fields, cls._types, args):
+            if not isinstance(x, t): raise TypeError("Unexpected type for field '{:s}' : {!r} != {!r}".format(n, t, type(x)))
+        return tuple.__new__(cls, res)
+
+    @classmethod
+    def _make(cls, iterable, new=tuple.__new__, len=len):
+        result = new(cls, iterable)
+        if len(result) != len(cls._fields):
+            raise TypeError("Expected {:d} arguments, got {:d}.".format(len(cls._fields), len(result)))
+        for n,t,x in zip(cls._fields, cls._types, result):
+            if not isinstance(x, t): raise TypeError("Unexpected type for field '{:s}' : {!r} != {!r}".format(n, t, type(x)))
+        return result
+
+    @classmethod
+    def _type(cls, name):
+        res = (t for n,t in zip(cls._fields, cls._types) if n == name)
+        try: return next(res)
+        except StopIteration:
+            raise ValueError("Got unexpected field name: {:s}".format(name))
+
+    def __getattribute__(self, name):
+        try:
+            # honor the ._fields first
+            res = object.__getattribute__(self, '_fields')
+            res = operator.itemgetter(res.index(name))
+        except (IndexError,ValueError):
+            res = lambda s: object.__getattribute__(s, name)
+        return res(self)
+
+    def __repr__(self):
+        res = ('{:s}={!r}'.format(name, value) for name,value in zip(self._fields, self))
+        return '{:s}({:s})'.format(self.__class__.__name__, ', '.join(res))
+
+    def _replace(self, **kwds):
+        result = self._make(map(kwds.pop, self._fields, self))
+        if kwds:
+            raise ValueError("Got unexpected field names: {!r}".format(kwds.keys()))
+        return result
+    def _asdict(self): return collections.OrderedDict(zip(self._fields, self))
+    def __getnewargs__(self): return tuple(self)
+    def __getstate__(self): return
+
+class symbol_t(object):
+    """A type that is used to describe a value that is symbolic in nature.
+    Used primarily as a type-checking mechanism.
+    """
+
+    @property
+    def __symbols__(self):
+        '''Must be implemented by each sub-class: Return a generator that returns each symbol described by ``self``.'''
+        raise NotImplementedError
+
+class regmatch(object):
+    def __new__(cls, *regs, **modifiers):
+        if not regs:
+            args = ', '.join(map('{:s}'.format, regs))
+            mods = ', '.join(map(internal.utils.unbox('{:s}={!r}'.format), modifiers.iteritems()))
+            raise AssertionError("{:s}({:s}{:s}) : Specified registers are empty.".format('.'.join((__name__,cls.__name__)), args, (', '+mods) if mods else ''))
+        use, iterops = cls.use(regs), cls.modifier(**modifiers)
+        def match(ea):
+            return any(map(functools.partial(use, ea), iterops(ea)))
+        return match
+
+    @classmethod
+    def use(cls, regs):
+        _instruction = sys.modules.get('instruction', __import__('instruction'))
+
+        # convert any regs that are strings into their correct object type
+        regs = { _instruction.reg.by_name(r) if isinstance(r, basestring) else r for r in regs }
+
+        # returns an iterable of bools that returns whether r is a subset of any of the registers in ``regs``.
+        match = lambda r, regs=regs: any(itertools.imap(r.relatedQ, regs))
+
+        # returns true if the operand at the specified address is related to one of the registers in ``regs``.
+        def uses_register(ea, opnum):
+            val = _instruction.op_value(ea, opnum)
+            if isinstance(val, symbol_t):
+                return any(map(match, val.__symbols__))
+            return False
+
+        return uses_register
+
+    @classmethod
+    def modifier(cls, **modifiers):
+        _instruction = sys.modules.get('instruction', __import__('instruction'))
+
+        # by default, grab all operand indexes
+        iterops = internal.utils.compose(_instruction.ops_count, xrange, sorted)
+
+        # if ``read`` is specified, then only grab operand indexes that are read from
+        if modifiers.get('read', False):
+            iterops = _instruction.ops_read
+
+        # if ``write`` is specified that only grab operand indexes that are written to
+        if modifiers.get('write', False):
+            iterops = _instruction.ops_write
+        return iterops
+

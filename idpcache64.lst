@@ -1,0 +1,63 @@
+78k064.w64:1482144400:NEC series:1:NEC 78K0:78k0
+78k0s64.w64:1482144400:NEC series:1:NEC 78K/0S:78k0s
+ad218x64.w64:1482144400:Analog Devices ADSP 218x:1:Analog Devices ADSP 218x:ad218x
+alpha64.w64:1482144400:Alpha series:2:ALPHA little endian:alphal:ALPHA big endian:alphab
+arc64.w64:1482144400:Argonaut RISC Core:2:Argonaut RISC Core ARCtangent-A4:arc:Argonaut RISC Core ARCompact:arcmpct
+arm64.w64:1482144400:ARM processors:5:ARM 710A:-ARM710a:ARM Little-endian:ARM:ARM Big-endian:ARMB:Intel xScale little-endian:-xScaleL:Intel xScale big-endian:-xScaleB
+avr64.w64:1482144400:Atmel AVR series:1:Atmel AVR:AVR
+c16664.w64:1482144400:Siemens C166:5:Siemens C166 family:c166:SGS-Thomson ST10:st10:Siemens Super10:super10:Siemens C166 v1 family:c166V1:Siemens C166 v2 family:c166V2
+cli64.w64:1482144400:Microsoft Visual Studio.Net:2:Microsoft Visual Studio.Net:cli:Microsoft Visual Studio.Net(alias):net
+dalvik64.w64:1482144400:Dalvik Virtual Machine:1:Dalvik Virtual Machine:dalvik
+dsp56k64.w64:1482144400:Motorola DSP 5600x:4:Motorola DSP 5600x:dsp56k:Motorola DSP 561xx:dsp561xx:Motorola DSP 563xx:dsp563xx:Motorola DSP 566xx:dsp566xx
+f2mc64.w64:1482144400:Fujitsu F2MC:2:Fujitsu F2MC 16L:F2MC16L:Fujitsu F2MC 16LX:F2MC16LX
+fr64.w64:1482144400:Fujitsu FR 32-Bit Family:1:Fujitsu FR 32-Bit Family:fr
+h850064.w64:1482144400:Hitachi H8/500:1:Hitachi H8/500:h8500
+h864.w64:1482144400:Hitachi H8:8:Hitachi H8/300H normal:h8300:Hitachi H8/300H advanced:h8300a:Hitachi H8S normal:h8s300:Hitachi H8S advanced:h8s300a:Hitachi H8SX normal:h8sxn:Hitachi H8SX middle:h8sxm:Hitachi H8SX advanced:h8sxa:Hitachi H8SX maximum:h8sx
+hppa64.w64:1482144400:PA-RISC:1:PA-RISC:hppa
+i19664.w64:1482144400:Intel 196 series:2:Intel 80196:80196:Intel 80196NP:80196NP
+i5164.w64:1482144400:Intel 51 series:6:Intel 8051:8051:Intel 80251 in binary mode:80251b:Intel 80251 in source mode:80251s:Intel 80930 in binary mode:80930b:Intel 80930 in source mode:80930s:Intel 8051MX:8051mx
+i86064.w64:1482144400:Intel 860 processors:2:Intel 860 XR:860xr:Intel 860 XP:860xp
+i96064.w64:1482144400:Intel 960:3:Intel 960 little endian (default):i960:Intel 960 little endian:i960l:Intel 960 big endian:i960b
+ia6464.w64:1482144400:Intel IA64 processors:2:Intel Itanium IA64 little endian:ia64l:Intel Itanium IA64 big endian:ia64b
+java64.w64:1482144400:Java Virtual Machine:1:java:java
+kr187864.w64:1482144400:Angstrem KR1878:1:Angstrem KR1878:kr1878
+m16c64.w64:1482144400:Renesas M16C Series:3:Renesas M16C/60:m16c60:Renesas M16C/20:m16c20:Renesas M16C/Tiny:m16ctiny
+m32r64.w64:1482144400:Mitsubishi 32-BIT family:2:Mitsubishi 32-BIT family:m32r:Mitsubishi 32-BIT family (extended):m32rx
+m6564.w64:1482144400:MOS Technology 65xx series:2:MOS Technology 6502:M6502:MOS Technology 65C02:M65C02
+m6581664.w64:1482144400:MOS Technology 658xx series:2:MOS Technology 65816:m65816:MOS Technology 65C816:m65c816
+m74064.w64:1482144400:Mitsubishi 8-BIT 740 family:1:Mitsubishi 8-BIT 740 family:m740
+m770064.w64:1482144400:Mitsubishi 16-BIT 7700 family:2:Mitsubishi 16-BIT 7700 family:m7700:Mitsubishi 16-BIT 7700 family (7750 series):m7750
+m790064.w64:1482144400:Mitsubishi series:1:Mitsubishi 7700 Family / 7900 Series:m7900
+mc681264.w64:1482144400:Motorola series:3:Motorola MC68HC12:6812:Motorola HCS12:HCS12:Motorola HCS12X:HCS12X
+mc681664.w64:1482144400:Motorola series:1:Motorola MC68HC16:6816
+mc6864.w64:1482144400:Motorola series:11:Motorola MC68000:68000:Motorola MC68010:68010:Motorola MC68020:68020:Motorola MC68030:68030:Motorola MC68040:68040:Motorola CPU32 (68330):68330:Motorola MC68020 with MC68882:68882:Motorola MC68020 with MC68851:68851:Motorola MC68020 with both:68020EX:Motorola ColdFire Family:ColdFire:Motorola MC68xxx universal emulator:68K
+mc864.w64:1482144400:Motorola series:10:Motorola MC6809:6809:Motorola MC6808:6808:Freescale HCS08:hcs08:Motorola MC6805:6805:Motorola MC6811:6811:Motorola MC6801/03:6801:Motorola MC6803/01:6803:Motorola MC6800:6800:Hitachi HD63701/03:6301:Hitachi HD63703/01:6303
+mips64.w64:1482144400:MIPS series:11:MIPS little endian:mipsl:MIPS big endian:mipsb:MIPS & RSP little endian:mipsrl:MIPS & RSP big endian:mipsr:MIPS R5900 (Sony Playstation2) little endian:r5900l:MIPS R5900 (Sony Playstation2) big endian:r5900b:Cavium Networks OCTEON little endian:octeonl:Cavium Networks OCTEON big endian:octeonb:Sony PSP (Allegrex):psp:Toshiba TX19a little endian:tx19al:Toshiba TX19a big endian:tx19ab
+nec85064.w64:1482144400:NEC series:2:NEC V850E1/ES:V850E1:NEC V850:V850
+oakdsp64.w64:1482144400:Atmel OAK DSP:1:Dsp Group OAK DSP:oakdsp
+pc64.w64:1482144400:Intel 80x86 processors:16:Intel 8086:8086:Intel 80286 real:80286r:Intel 80286 protected:80286p:Intel 80386 real:80386r:Intel 80386 protected:80386p:Intel 80486 real:80486r:Intel 80486 protected:80486p:Intel Pentium real with MMX:80586r:Intel Pentium protected with MMX:80586p:Intel Pentium Pro (P6) with MMX:80686p:Intel Pentium II:p2:AMD K6-2 with 3DNow!:k62:Intel Pentium III:p3:AMD Athlon (K7):athlon:Intel Pentium 4:p4:MetaPC (disassemble all opcodes):metapc
+pdp1164.w64:1482144400:DEC series:1:DEC PDP-11:PDP11
+pic64.w64:1482144400:Microchip PIC:3:Microchip PIC PIC12Cxx - 12 bit instructions:PIC12Cxx:Microchip PIC PIC16Cxx - 14 bit instructions:PIC16Cxx:Microchip PIC PIC18Cxx - 16 bit instructions:PIC18Cxx
+ppc64.w64:1482144400:PowerPC:2:PowerPC big-endian:PPC:PowerPC little-endian:PPCL
+sam864.w64:1482144400:Samsung microcontrollers:1:Samsung SAM8-based processors:SAM8
+sh364.w64:1482144400:Renesas:5:Renesas SH-3 (little endian):SH3:Renesas SH-3 (big endian):SH3B:Renesas SH-4 (little endian):SH4:Renesas SH-4 (big endian):SH4B:Renesas SH-2A (big endian):SH2A
+sparc64.w64:1482144400:SPARC series:2:SPARC little endian:sparcl:SPARC big endian:sparcb
+spc70064.w64:1482144400:Sony:1:Sony SPC700:spc700
+st2064.w64:1482144400:SGS-Thomson ST20:2:SGS-Thomson ST20/C1:st20:SGS-Thomson ST20/C2-C4:st20c4
+st764.w64:1482144400:SGS-Thomson ST7:1:SGS-Thomson ST7:st7
+st964.w64:1482144400:ST9 Family:1:SGS-Thomson ST9:st9
+tms3202864.w64:1482144400:TMS320C28x series:1:Texas Instruments TMS320C28x:TMS32028
+tms3205464.w64:1482144400:TMS320C54x Series:1:Texas Instruments TMS320C54:TMS32054
+tms3205564.w64:1482144400:TMS320C55x Series:1:Texas Instruments TMS320C55:TMS32055
+tms320c164.w64:1482144400:TMS320C1X Series:1:Texas Instruments TMS320C1X DSP:tms320c1x
+tms320c364.w64:1482144400:TMS320C3x Series:1:Texas Instruments TMS320C3X:TMS320C3
+tms320c564.w64:1482144400:TMS320C5x series:2:Texas Instruments TMS320C5x:TMS320C5:Texas Instruments TMS320C2x:TMS320C2
+tms320c664.w64:1482144400:TMS320C6 series:1:Texas Instruments TMS320C6xxx:TMS320C6
+tricore64.w64:1482144400:TRICORE series:1:Infineon TRICORE:TRICORE
+unsp64.w64:1482144400:SunPlus unSP:1:SunPlus unSP:unsp
+xa64.w64:1482144400:Philips 51XA Series:1:Philips 51XA G3:51XA-G3
+z8064.w64:1482144400:Z80 processors:6:Intel 8085:8085:Zilog 80:z80:Hitachi HD64180:64180:Zilog Z180:z180:Zilog Z380:z380:GameBoy:gb
+z864.w64:1482144400:Zilog Z8 series:1:Zilog Z8 MCU:Z8
+ebc.py:1470700790:EFI:1:EFI Byte code:ebc
+msp430.py:1470700790:Texas:1:Texas Instruments MSP430:msp430
+spu.py:1470700790:SPU:1:SPU:spu

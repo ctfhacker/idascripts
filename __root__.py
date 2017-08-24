@@ -22,7 +22,6 @@ __import__('logging').root.level = __import__('logging').INFO
 
 # shortcuts
 h,top,go,goof = database.h,func.top,database.go,database.goof
-hex = '{:x}'.format
 
 # functional tools
 import functools,itertools,operator
@@ -39,6 +38,7 @@ AnyRegister = AnyReg = __import__('internal').utils.PatternAnyType(instruction.r
 AnyInteger = AnyInt = __import__('internal').utils.PatternAnyType(__import__('six').integer_types)
 AnyString = AnyStr = __import__('internal').utils.PatternAnyType(basestring)
 Any = _ = __import__('internal').utils.PatternAny()
+architecture_t, register_t, symbol_t = instruction.architecture_t, instruction.register_t, __import__('internal').interface.symbol_t
 
 import tools,ui
 from tools import remote
@@ -49,7 +49,7 @@ import custom,app
 ### begin hooking ida to monitor it's state
 # scope for execution queue and hooks
 ui.queue.__start_ida__(), ui.hook.__start_ida__()
-map(__import__('atexit').register, (ui.queue.__stop_ida__, ui.hook.__stop_ida__))
+ui.hook.ui.add('term', ui.queue.__stop_ida__, 1000), ui.hook.ui.add('term', ui.hook.__stop_ida__, 10000)
 
 # start and stop execution queue when database is open or closed
 ui.hook.idp.add('init', ui.queue.__open_database__, 0)

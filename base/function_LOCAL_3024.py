@@ -26,7 +26,7 @@ def by_address(ea):
     ea = interface.address.within(ea)
     res = idaapi.get_func(ea)
     if res is None:
-        raise LookupError("{:s}.by_address({:x}) : Unable to locate function".format(__name__, ea))
+        raise LookupError("{:s}.by_address({:x}) : Unable to locate function".format(__name__,ea))
     return res
 byAddress = by_address
 
@@ -62,17 +62,14 @@ def __addressOfRtOrSt(func):
         except LookupError: raise e
 
         # yep, we're an import
-        return True, func
-    if fn is None:
-        raise LookupError("{:s}.by({!r}) : Unable to locate function with the specified identifier.".format(__name__, func))
-    return False, fn.startEA
+        return True,func
+    return False,fn.startEA
 
 @utils.multicase()
 def address():
     '''Return the address of the current function.'''
     fn = ui.current.function()
-    if fn is None:
-        raise LookupError("{:s}.address({:x}) : Not currently positioned within a function.".format(__name__, ui.current.address()))
+    if fn is None: raise LookupError("{:s}.address({:x}) : Not currently positioned within a function".format(__name__, ui.current.address()))
     return fn.startEA
 @utils.multicase()
 def address(func):
@@ -99,9 +96,9 @@ def guess():
 def guess(ea):
     '''Return the boundaries of the function chunk for the address ``ea``.'''
     ea = interface.address.within(ea)
-    for left, right in chunks(ea):
+    for left,right in chunks(ea):
         if left <= ea < right:
-            return left, right
+            return left,right
         continue
     raise LookupError("{:s}.guess({:x}) : Unable to determine function chunk's bounds.".format(__name__, ea))
 
@@ -189,7 +186,7 @@ def set_name(func, string):
 
     res = idaapi.validate_name2(buffer(string)[:])
     if string and string != res:
-        logging.warn('{:s}.set_name({:x}, {!r}) : Stripping invalid chars from function name. : {!r}'.format(__name__, ea, string, res))
+        logging.warn('{:s}.set_name : Stripping invalid chars from function name {!r} at {:x}. : {!r}'.format(__name__, string, ea, res))
         string = res
 
     if rt:
@@ -198,7 +195,7 @@ def set_name(func, string):
     else:
         res, ok = get_name(ea), idaapi.set_name(ea, string, idaapi.SN_PUBLIC)
     if not ok:
-        raise ValueError("{:s}.set_name({:x}, {!r}) : Unable to apply function name.".format(__name__, ea, string))
+        raise AssertionError('{:s}.set_name : Unable to set function name for {:x} : {!r}'.format(__name__, ea, string))
     return res
 
 @utils.multicase()
@@ -242,8 +239,7 @@ def prototype(func):
         result = res[:idx] + ' ' + funcname + res[idx:]
 
     except ValueError:
-        if not internal.declaration.mangled(funcname):
-            raise
+        if not internal.declaration.mangled(funcname): raise
         result = internal.declaration.demangle(funcname)
     return result
 
@@ -258,7 +254,7 @@ def frame(func):
     res = idaapi.get_frame(fn.startEA)
     if res is not None:
         return structure.instance(res.id, offset=-fn.frsize)
-    logging.info("{:s}.frame({:x}) : Function {:s} does not have a frame.".format(__name__, fn.startEA, name(fn.startEA)))
+    logging.info("{:s}.frame : function does not have a frame : {:x} : {:s}".format(__name__, fn.startEA, name(fn.startEA)))
     return structure.instance(-1)
 
 # FIXME: fix the naming
@@ -271,14 +267,14 @@ def range(func):
     '''Return a tuple containing the bounds of the first chunk of the function ``func``.'''
     fn = by(func)
     if fn is None:
-        raise ValueError("{:s}.range({!r}) : Specified location is not contained within a function.".format(__name__, func, ea))
-    return fn.startEA, fn.endEA
+        raise ValueError("{:s}.range : address {:x} is not contained in a function".format(__name__, ea))
+    return fn.startEA,fn.endEA
 
 @utils.multicase(none=types.NoneType)
 def set_color(none):
     '''Remove the color from the current function.'''
     return set_color(ui.current.function(), None)
-@utils.multicase(rgb=six.integer_types)
+@utils.multicase(rgb=int)
 def set_color(rgb):
     '''Set the color of the current function to ``rgb``.'''
     return set_color(ui.current.function(), rgb)
@@ -417,7 +413,7 @@ def chunks(func):
     fn = by(func)
     fci = idaapi.func_tail_iterator_t(fn, fn.startEA)
     if not fci.main():
-        raise ValueError("{:s}.chunks({:x}) : Unable to create a func_tail_iterator_t".format(__name__, fn.startEA))
+        raise ValueError("{:s}.chunks({!r}) : Unable to create a func_tail_iterator_t".format(__name__, func))
 
     while True:
         ch = fci.chunk()
@@ -438,7 +434,7 @@ class chunk(object):
             if l <= ea < r:
                 return l, r
             continue
-        raise LookupError("{:s}.chunk({:x}) : Unable to locate chunk for function {:x}.".format(__name__, ea, address(func)))
+        raise LookupError("{:s}.chunk({:x}) : Unable to locate function chunk for function. : {:x}".format(__name__, ea, address(func)))
 
     @utils.multicase(start=six.integer_types, end=six.integer_types)
     @classmethod
@@ -533,11 +529,9 @@ def arguments(func):
     # grab from structure
     fr = idaapi.get_frame(fn)
     if fr is None:  # unable to figure out arguments
-        raise LookupError("{:s}.arguments({:x}) : Unable to determine function frame.".format(__name__, fn.startEA))
-
-    # FIXME: figure out calling convention and grab correct arguments
+        raise LookupError("{:s}.arguments({!r}) : Unable to determine function frame.".format(__name__, func))
     if database.config.bits() != 32:
-        logging.warn('{:s}.arguments({:x}) : Possibility that register-based arguments will not be listed due to {:d}-bit calling convention.'.format(__name__, fn.startEA, database.config.bits()))
+        logging.warn('{:s}.arguments({!r}) : Possibility that register-based arguments for {:x} will not be listed due to {:d}-bit calling convention.'.format(__name__, func, fn.startEA, database.config.bits()))
 
     base = get_vars_size(fn)+get_regs_size(fn)
     for (off,size),(name,_,_) in structure.fragment(fr.id, base, get_args_size(fn)):
@@ -555,16 +549,6 @@ class blocks(object):
         '''Returns the bounds of each basic-block for the function ``func``.'''
         for bb in cls.iterate(func):
             yield bb.startEA, bb.endEA
-        return
-    @utils.multicase()
-    def __new__(cls, left, right):
-        '''Returns each basic-block contained within the addresses ``left`` and ``right``.'''
-        func = by_address(left)
-        (left,_), (_,right) = block(left), block(database.address.prev(right))
-        for bb in cls.iterate(func):
-            if (bb.startEA >= left and bb.endEA <= right):
-                yield bb.startEA, bb.endEA
-            continue
         return
 
     @utils.multicase()
@@ -699,49 +683,11 @@ class block(object):
     def __new__(cls, func, ea):
         '''Returns the boundaries of the basic-block at address ``ea`` in function ``func``.'''
         res = blocks.get(func, ea)
-        return res.startEA, res.endEA
+        return res.startEA,res.endEA
     @utils.multicase(bb=idaapi.BasicBlock)
     def __new__(cls, bb):
         '''Returns the boundaries of the basic-block ``bb``.'''
         return bb.startEA, bb.endEA
-
-    @utils.multicase()
-    @classmethod
-    def top(cls):
-        '''Return the top address of the basic-block at the current address.'''
-        left, _ = cls()
-        return left
-    @utils.multicase(ea=six.integer_types)
-    @classmethod
-    def top(cls, ea):
-        '''Return the top address of the basic-block at address ``ea``.'''
-        left, _ = cls(ea)
-        return left
-    @utils.multicase(bb=idaapi.BasicBlock)
-    @classmethod
-    def top(cls, bb):
-        '''Return the top address of the basic-block ``bb``.'''
-        left, _ = cls(bb)
-        return left
-
-    @utils.multicase()
-    @classmethod
-    def bottom(cls):
-        '''Return the bottom address of the basic-block at the current address.'''
-        _, right = cls()
-        return right
-    @utils.multicase(ea=six.integer_types)
-    @classmethod
-    def bottom(cls, ea):
-        '''Return the bottom address of the basic-block at address ``ea``.'''
-        _, right = cls(ea)
-        return right
-    @utils.multicase(bb=idaapi.BasicBlock)
-    @classmethod
-    def bottom(cls, bb):
-        '''Return the bottom address of the basic-block ``bb``.'''
-        _, right = cls(bb)
-        return right
 
     @utils.multicase(none=types.NoneType)
     @classmethod
@@ -766,7 +712,7 @@ class block(object):
             database.set_color(ea, None)
             # internal.netnode.alt.remove(ea, 0x14)
         return res
-    @utils.multicase(ea=six.integer_types, rgb=six.integer_types)
+    @utils.multicase(ea=six.integer_types, rgb=int)
     @classmethod
     def set_color(cls, ea, rgb, **frame):
         """Sets the color of the basic-block at address ``ea`` to ``rgb``.
@@ -807,7 +753,7 @@ class block(object):
             database.set_color(ea, None)
             #internal.netnode.alt.remove(ea, 0x14)
         return res
-    @utils.multicase(bb=idaapi.BasicBlock, rgb=six.integer_types)
+    @utils.multicase(bb=idaapi.BasicBlock, rgb=int)
     @classmethod
     def set_color(cls, bb, rgb, **frame):
         """Sets the color of the basic-block ``bb`` to ``rgb``.
@@ -893,14 +839,14 @@ class block(object):
     def color(cls, bb, none):
         '''Removes the color of the basic-block ``bb``.'''
         return cls.set_color(bb, None)
-    @utils.multicase(ea=six.integer_types, rgb=six.integer_types)
+    @utils.multicase(ea=six.integer_types, rgb=int)
     @classmethod
     def color(cls, ea, rgb, **frame):
         """Sets the color of the basic-block at the address ``ea`` to ``rgb``.
         If the color ``frame`` is specified, set the frame to the specified color.
         """
         return cls.set_color(ea, rgb, **frame)
-    @utils.multicase(bb=idaapi.BasicBlock, rgb=six.integer_types)
+    @utils.multicase(bb=idaapi.BasicBlock, rgb=int)
     @classmethod
     def color(cls, bb, rgb, **frame):
         """Sets the color of the basic-block ``bb`` to ``rgb``.
@@ -962,36 +908,6 @@ class block(object):
         l, r = bb.startEA, bb.endEA
         return database.iterate(l, database.address.prev(r))
 
-    @utils.multicase(reg=(basestring,_instruction.register_t))
-    @classmethod
-    def register(cls, reg, *regs, **modifiers):
-        """Yield each (address, operand-number, operand-state) within the current basic-block that touches one of the registers identified by ``regs``.
-        If the keyword ``write`` is True, then only return the result if it's writing to the register.
-        """
-        return cls.register(ui.current.address(), reg, *regs, **modifiers)
-    @utils.multicase(ea=six.integer_types, reg=(basestring,_instruction.register_t))
-    @classmethod
-    def register(cls, ea, reg, *regs, **modifiers):
-        """Yield each (address, operand-number, operand-state) within the basic-block containing ``ea`` that touches one of the registers identified by ``regs``.
-        If the keyword ``write`` is True, then only return the result if it's writing to the register.
-        """
-        blk = blocks.get(ea)
-        return cls.register(blk, reg, *regs, **modifiers)
-    @utils.multicase(bb=idaapi.BasicBlock, reg=(basestring,_instruction.register_t))
-    @classmethod
-    def register(cls, bb, reg, *regs, **modifiers):
-        """Yield each (address, operand-number, operand-state) within the basic-block ``bb`` that touches one of the registers identified by ``regs``.
-        If the keyword ``write`` is True, then only return the result if it's writing to the register.
-        """
-        iterops = interface.regmatch.modifier(**modifiers)
-        uses_register = interface.regmatch.use( (reg,)+regs )
-
-        for ea in cls.iterate(bb):
-            for opnum in filter(functools.partial(uses_register, ea), iterops(ea)):
-                yield ea, opnum, _instruction.op_state(ea, opnum)
-            continue
-        return
-
     @utils.multicase()
     @classmethod
     def read(cls):
@@ -1044,7 +960,7 @@ class block(object):
         formatted = reduce(lambda t,c: t if t[-1].ea == c.ea else t+[c], res, [next(res)])
 
         res = []
-        # FIXME: This is pretty damn unstable in my tests.
+        # FIXME: pretty damn unstable
         try:
             for fmt in formatted:
                 res.append( fmt.print1(source.__deref__()) )
@@ -1170,11 +1086,11 @@ def tag_read(func):
     try:
         rt,ea = __addressOfRtOrSt(func)
     except LookupError:
-        logging.warn('{:s}.tag_read({!r}) : Attempted to read tag from a non-function. Falling back to a database tag.'.format(__name__, func))
+        logging.warn('{:s}.tag_read : Attempted to read tag from a non-function. Falling back to a database tag. : {:x}'.format(__name__, func))
         return database.tag_read(func)
 
     if rt:
-        logging.warn('{:s}.tag_read({:x}) : Attempted to read tag from a runtime-linked address. Falling back to a database tag.'.format(__name__, ea))
+        logging.warn('{:s}.tag_read : Attempted to read tag from a runtime-linked address. Falling back to a database tag. : {:x}'.format(__name__, ea))
         return database.tag_read(ea)
 
     fn,repeatable = by_address(ea), True
@@ -1183,7 +1099,7 @@ def tag_read(func):
     res = comment(fn, repeatable=not repeatable)
     d2 = internal.comment.decode(res)
     if d1.viewkeys() & d2.viewkeys():
-        logging.warn('{:s}.tag_read({:x}) : Contents of both repeatable and non-repeatable comments conflict with one another. Giving the {:s} comment priority.'.format(__name__, ea, 'repeatable' if repeatable else 'non-repeatable', d1 if repeatable else d2))
+        logging.warn('{:s}.tag_read : Contents of both repeatable and non-repeatable comments conflict with one another. Giving the {:s} comment priority.'.format(__name__, 'repeatable' if repeatable else 'non-repeatable', d1 if repeatable else d2))
     res = {}
     map(res.update, (d1,d2))
 
@@ -1211,19 +1127,19 @@ def tag_write(key, none):
 def tag_write(func, key, value):
     '''Set the tag ``key`` to ``value`` for the function ``func``.'''
     if value is None:
-        raise ValueError("{:s}.tag_write({!r}) : Tried to set tag {!r} to an invalid value.".format(__name__, ea, key))
+        raise AssertionError('{:s}.tag_write : Tried to set tag {!r} to an invalid value.'.format(__name__, key))
 
     # Check to see if function tag is being applied to an import
     try:
         rt,ea = __addressOfRtOrSt(func)
     except LookupError:
         # If we're not even in a function, then use a database tag.
-        logging.warn('{:s}.tag_write({!r}, {!r}, ...) : Attempted to set tag for a non-function. Falling back to a database tag.'.format(__name__, func, key))
+        logging.warn('{:s}.tag_write : Attempted to set tag for a non-function. Falling back to a database tag. : {:x}'.format(__name__, func))
         return database.tag_write(func, key, value)
 
     # If so, then write the tag to the import
     if rt:
-        logging.warn('{:s}.tag_write({:x}, {!r}, ...) : Attempted to set tag for a runtime-linked symbol. Falling back to a database tag.'.format(__name__, ea, key))
+        logging.warn('{:s}.tag_write : Attempted to set tag for a runtime-linked symbol. Falling back to a database tag. : {:x}'.format(__name__, ea))
         return database.tag_write(ea, key, value)
 
     # Otherwise, it's a function.
@@ -1250,12 +1166,12 @@ def tag_write(func, key, none):
         rt,ea = __addressOfRtOrSt(func)
     except LookupError:
         # If we're not even in a function, then use a database tag.
-        logging.warn('{:s}.tag_write({!r}, {!r}, ...) : Attempted to clear tag for a non-function. Falling back to a database tag.'.format(__name__, func, key))
+        logging.warn('{:s}.tag_write : Attempted to clear tag for a non-function. Falling back to a database tag. : {:x}'.format(__name__, func))
         return database.tag_write(func, key, none)
 
     # If so, then write the tag to the import
     if rt:
-        logging.warn('{:s}.tag_write({:x}, {!r}, ...) : Attempted to set tag for a runtime-linked symbol. Falling back to a database tag.'.format(__name__, ea, key))
+        logging.warn('{:s}.tag_write : Attempted to set tag for a runtime-linked symbol. Falling back to a database tag. : {:x}'.format(__name__, ea))
         return database.tag_write(ea, key, none)
 
     # Otherwise, it's a function.
@@ -1371,16 +1287,16 @@ def down():
 @utils.multicase()
 def down(func):
     '''Return all the functions that are called by the function ``func``.'''
-    def codeRefs(fn):
+    def codeRefs(func):
         resultData,resultCode = [],[]
-        for ea in iterate(fn):
+        for ea in iterate(func):
             if len(database.down(ea)) == 0:
                 if database.type.is_code(ea) and _instruction.is_call(ea):
-                    logging.warn('{:s}.down({:x}) : Discovered a dynamically resolved call that is unable to be resolved. : {:s}'.format(__name__, fn.startEA, database.disasm(ea)))
+                    logging.warn('{:s}.down({:x}) : Discovered a dynamically resolved call that is unable to be resolved. : {:s}'.format(__name__, func.startEA, database.disasm(ea)))
                     #resultCode.append((ea, 0))
                 continue
             resultData.extend( (ea,x) for x in database.dxdown(ea) )
-            resultCode.extend( (ea,x) for x in database.cxdown(ea) if fn.startEA == x or not contains(fn,x) )
+            resultCode.extend( (ea,x) for x in database.cxdown(ea) if func.startEA == x or not contains(func,x) )
         return resultData,resultCode
     fn = by(func)
     return sorted(set(d for x,d in codeRefs(fn)[1]))
@@ -1498,21 +1414,38 @@ class type(object):
 
 @utils.multicase(reg=(basestring,_instruction.register_t))
 def register(reg, *regs, **modifiers):
-    """Yield each (address, operand-number, operand-state) within the current function that touches one of the registers identified by ``regs``.
-    If the keyword ``write`` is True, then only return the result if it's writing to the register.
+    """Yield all the addresses within the current function that touches one of the registers identified by ``regs``.
     """
     return register(ui.current.function(), reg, *regs, **modifiers)
 @utils.multicase(reg=(basestring,_instruction.register_t))
 def register(func, reg, *regs, **modifiers):
-    """Yield each (address, operand-number, operand-state) within the function ``func`` that touches one of the registers identified by ``regs``.
-    If the keyword ``write`` is True, then only return the result if it's writing to the register.
+    """Yield all the addresses within the function ``func`` that touches one of the registers identified by ``regs``.
+    If the keyword ``write`` is True, then only return the address if it's writing to the register.
     """
-    iterops = interface.regmatch.modifier(**modifiers)
-    uses_register = interface.regmatch.use( (reg,)+regs )
+    regs = [ _instruction.reg.by_name(r) if isinstance(r, basestring) else r for r in (reg,)+regs ]
+
+    # returns an iterable of bools that returns whether r is a subset of any of the registers in ``regs``.
+    match = lambda r,regs: any(itertools.imap(r.relatedQ,regs))
+
+    def uses_register(ea, opnum, regs):
+        val = _instruction.op_value(ea, opnum)
+        if isinstance(val, _instruction.register_t):
+            return match(val, regs)
+        elif hasattr(val, 'registers'):
+            return any(match(r, regs) for r in val.registers())
+        return False
+
+    iterops = utils.compose(_instruction.ops_count, xrange, __builtin__.list)
+    if modifiers.get('read', False):
+        iterops = _instruction.ops_read
+    if modifiers.get('write', False):
+        iterops = _instruction.ops_write
 
     for ea in iterate(func):
-        for opnum in filter(functools.partial(uses_register, ea), iterops(ea)):
-            yield ea, opnum, _instruction.op_state(ea, opnum)
+        for opnum in iterops(ea):
+            if uses_register(ea, opnum, regs):
+                yield ea, opnum, _instruction.op_state(ea, opnum)
+            continue
         continue
     return
 
@@ -1526,10 +1459,10 @@ def stackdelta(ea, delta, **direction):
     """Return the boundaries of the address ``ea`` that fit within the specified stack ``delta``.
     If int ``direction`` is provided, search backwards if it's less than 0 or forwards if it's greater.
     """
-    dir = direction.get('direction', direction.get('dir', -1))
-    if dir == 0:
-        raise ValueError("{:s}.stackdelta({:x}, {:+x}{:s}) : Invalid value specified for `direction` argument.".format(__name__, ea, delta, ', {:s}'.format(', '.join('{:s}={!r}'.format(k, v) for k,v in direction.iteritems())) if direction else ''))
-    next = database.next if dir > 0 else database.prev
+    direction = direction.get('direction', -1)
+    if direction == 0:
+        raise AssertionError('you make no sense with your lack of direction')
+    next = database.next if direction > 0 else database.prev
 
     sp, ea = get_spdelta(ea), interface.address.inside(ea)
     start = (ea,sp)
