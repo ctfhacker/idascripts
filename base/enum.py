@@ -64,6 +64,30 @@ def by(index):
 @utils.multicase(name=basestring)
 def by(name):
     return by_name(name)
+@utils.multicase()
+def by(**type):
+    """Search through all the enumerations within the database and return the first result.
+
+    like = glob match
+    regex = regular expression
+    index = particular index
+    identifier or id = internal id number
+    """
+    searchstring = ', '.join("{:s}={!r}".format(k,v) for k,v in type.iteritems())
+
+    res = __builtin__.list(iterate(**type))
+    if len(res) > 1:
+        map(logging.info, ("[{:d}] {:s} & {:#x} ({:d} members){:s}".format(idaapi.get_enum_idx(n), idaapi.get_enum_name(n), mask(n), len(__builtin__.list(members(n))), " // {:s}".format(comment(n)) if comment(n) else '') for i,n in enumerate(res)))
+        logging.warn("{:s}.search({:s}) : Found {:d} matching results, returning the first one.".format(__name__, searchstring, len(res)))
+
+    res = next(iter(res), None)
+    if res is None:
+        raise LookupError("{:s}.search({:s}) : Found 0 matching results.".format(__name__, searchstring))
+    return res
+
+def search(string):
+    '''Search through all the enumerations using globbing.'''
+    return by(like=string)
 
 def keys(id):
     '''Return the names of all of the elements of the enumeration ``id``.'''
@@ -153,7 +177,7 @@ def repr(enum):
     w = size(eid)*2
     result = [(member.name(n),member.value(n),member.mask(n),member.comment(n)) for n in member.iterate(eid)]
     aligned = max((len(n) for n,_,_,_ in result))
-    return "<type 'enum'> {:s}\n".format(name(eid)) + '\n'.join(('[{:d}] {:<{align}s} : {:#0{width}x} & {:#0{width}x}'.format(i, name, value, bmask, width=w+2, align=aligned)+((' # '+comment) if comment else '') for i,(name,value,bmask,comment) in enumerate(result)))
+    return "<type 'enum'> {:s}\n".format(name(eid)) + '\n'.join(("[{:d}] {:<{align}s} : {:#0{width}x} & {:#0{width}x}".format(i, name, value, bmask, width=w+2, align=aligned)+((' # '+comment) if comment else '') for i,(name,value,bmask,comment) in enumerate(result)))
 
 __matcher__ = utils.matcher()
 __matcher__.attribute('index', idaapi.get_enum_idx)
@@ -203,33 +227,8 @@ def list(**type):
     cmask = max(__builtin__.map(utils.compose(mask, math.log, functools.partial(operator.mul, 1.0/math.log(16)), math.ceil), res) or [database.config.bits()/4.0])
 
     for n in res:
-        print('[{:{:d}d}] {:>{:d}s} & {:#<{:d}x} ({:d} members){:s}'.format(idaapi.get_enum_idx(n), int(cindex), idaapi.get_enum_name(n), maxname, mask(n), int(cmask), len(__builtin__.list(members(n))), ' // {:s}'.format(comment(n)) if comment(n) else ''))
+        print("[{:{:d}d}] {:>{:d}s} & {:#<{:d}x} ({:d} members){:s}".format(idaapi.get_enum_idx(n), int(cindex), idaapi.get_enum_name(n), maxname, mask(n), int(cmask), len(__builtin__.list(members(n))), " // {:s}".format(comment(n)) if comment(n) else ''))
     return
-
-@utils.multicase(string=basestring)
-def search(string):
-    '''Search through all the enumerations using globbing.'''
-    return search(like=string)
-@utils.multicase()
-def search(**type):
-    """Search through all the enumerations within the database and return the first result.
-
-    like = glob match
-    regex = regular expression
-    index = particular index
-    identifier or id = internal id number
-    """
-    searchstring = ', '.join('{:s}={!r}'.format(k,v) for k,v in type.iteritems())
-
-    res = __builtin__.list(iterate(**type))
-    if len(res) > 1:
-        map(logging.info, ('[{:d}] {:s} & {:#x} ({:d} members){:s}'.format(idaapi.get_enum_idx(n), idaapi.get_enum_name(n), mask(n), len(__builtin__.list(members(n))), ' // {:s}'.format(comment(n)) if comment(n) else '') for i,n in enumerate(res)))
-        logging.warn('{:s}.search({:s}) : Found {:d} matching results, returning the first one.'.format(__name__, searchstring, len(res)))
-
-    res = next(iter(res), None)
-    if res is None:
-        raise LookupError("{:s}.search({:s}) : Found 0 matching results.".format(__name__, searchstring))
-    return res
 
 ## members
 class member(object):
@@ -490,7 +489,7 @@ class member(object):
         eid = by(enum)
         res = __builtin__.list(cls.iterate(eid))
         maxindex = max(__builtin__.map(utils.first, enumerate(res)) or [1])
-        maxvalue = max(__builtin__.map(utils.compose(cls.value, '{:x}'.format, len), res) or [1])
+        maxvalue = max(__builtin__.map(utils.compose(cls.value, "{:x}".format, len), res) or [1])
         for i, mid in enumerate(res):
-             print('[{:d}] {:>0{:d}x} {:s}'.format(i, cls.value(mid), maxvalue, cls.name(mid)))
+             print("[{:d}] {:>0{:d}x} {:s}".format(i, cls.value(mid), maxvalue, cls.name(mid)))
         return

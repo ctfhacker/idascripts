@@ -1,7 +1,7 @@
 import sys,logging
 import operator,functools,itertools
 import collections,heapq,types
-import six,traceback
+import six,traceback,ctypes
 
 import internal,ui
 import idaapi
@@ -20,6 +20,8 @@ class typemap:
         4:(idaapi.dwrdflag(), -1),  8:(idaapi.qwrdflag(), -1), 10:(idaapi.tbytflag(), -1),
         16:(idaapi.owrdflag(), -1),
     }
+    if idaapi.__version__ >= 7.0:
+        del integermap[3]
     if hasattr(idaapi, 'ywrdflag'): integermap[32] = getattr(idaapi, 'ywrdflag')(),-1
 
     decimalmap = {
@@ -59,7 +61,7 @@ class typemap:
 
     # defaults
     @classmethod
-    def __kernel_config_loaded__(cls):
+    def __newprc__(cls, pnum):
         info = idaapi.get_inf_structure()
         bits = 64 if info.is_64bit() else 32 if info.is_32bit() else None
         if bits is None: return
@@ -68,6 +70,10 @@ class typemap:
         typemap.decimalmap[None] = typemap.decimalmap[bits/8]
         typemap.ptrmap[None] = typemap.ptrmap[bits/8]
         typemap.stringmap[None] = typemap.stringmap[str]
+
+    @classmethod
+    def __ev_newprc__(cls, pnum, keep_cfg):
+        return cls.__newprc__(pnum)
 
     @classmethod
     def dissolve(cls, flag, typeid, size):
@@ -79,12 +85,12 @@ class typemap:
             sz = t.size
             return t if sz == size else [t,size // sz]
         if dt not in cls.inverted:
-            logging.warn('{:s}.{:s}.dissolve({!r}, {!r}, {!r}) : Unable to identify a pythonic type.'.format('.'.join(('internal',__name__)), cls.__name__, dt, typeid, size))
+            logging.warn("{:s}.dissolve({!r}, {!r}, {!r}) : Unable to identify a pythonic type.".format('.'.join(('internal',__name__,cls.__name__)), dt, typeid, size))
 
         t,sz = cls.inverted[dt]
         # if the type and size are the same, then it's a string or pointer type
         if not isinstance(sz,six.integer_types):
-            count = size // idaapi.get_data_type_size(dt, idaapi.opinfo_t())
+            count = size // idaapi.get_data_elsize(idaapi.BADADDR, dt, idaapi.opinfo_t())
             return [t,count] if count > 1 else t
         # if the size matches, then we assume it's a single element
         elif sz == size:
@@ -126,7 +132,7 @@ class typemap:
 
             opinfo = idaapi.opinfo_t()
             opinfo.tid = typeid
-            return flag,typeid,idaapi.get_data_type_size(flag, opinfo)
+            return flag,typeid,idaapi.get_data_elsize(idaapi.BADADDR, flag, opinfo)
 
         return flag|(idaapi.FF_SIGN if sz < 0 else 0),typeid,abs(sz)*count
 
@@ -151,17 +157,17 @@ class priorityhook(object):
     def enable(self, name):
         '''Enable any hooks for the ``name`` event that have been previously disabled.'''
         if name not in self.__disabled:
-            logging.fatal("{:s}.{:s}.enable : Hook {:s}.{:s} is not disabled. : {:s}".format('.'.join(('internal',__name__)), cls.__name__, self.__type__.__name__, name, '{'+', '.join(self.__disabled)+'}'))
+            logging.fatal("{:s}.enable : Hook {:s} is not disabled. : {:s}".format('.'.join(('internal',__name__,cls.__name__)), '.'.join((self.__type__.__name__, name)), '{'+', '.join(self.__disabled)+'}'))
             return False
         self.__disabled.discard(name)
         return True
     def disable(self, name):
         '''Disable execution of all the hooks for the ``name`` event.'''
         if name not in self.__cache:
-            logging.fatal("{:s}.{:s}.disable : Hook {:s}.{:s} does not exist. : {:s}".format('.'.join(('internal',__name__)), cls.__name__, self.__type__.__name__, name, '{'+', '.join(self.__cache.viewkeys())+'}'))
+            logging.fatal("{:s}.disable : Hook {:s} does not exist. : {:s}".format('.'.join(('internal',__name__,cls.__name__)), '.'.join((self.__type__.__name__, name)), '{'+', '.join(self.__cache.viewkeys())+'}'))
             return False
         if name in self.__disabled:
-            logging.warn("{:s}.{:s}.disable : Hook {:s}.{:s} has already been disabled. : {:s}".format('.'.join(('internal',__name__)), cls.__name__, self.__type__.__name__, name, '{'+', '.join(self.__disabled)+'}'))
+            logging.warn("{:s}.disable : Hook {:s} has already been disabled. : {:s}".format('.'.join(('internal',__name__,cls.__name__)), '.'.join((self.__type__.__name__, name)), '{'+', '.join(self.__disabled)+'}'))
             return False
         self.__disabled.add(name)
         return True
@@ -177,7 +183,7 @@ class priorityhook(object):
         # uhook previous object
         ok = object.unhook()
         if not ok:
-            logging.debug('{:s}.{:s}.cycle : Error trying to unhook object. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, object))
+            logging.debug("{:s}.cycle : Error trying to unhook object. : {!r}".format('.'.join(('internal',__name__,cls.__name__)), object))
 
         namespace = { name : self._new_(name) for name in self.__cache.viewkeys() }
         res = type(object.__class__.__name__, (self.__type__,), namespace)
@@ -185,7 +191,7 @@ class priorityhook(object):
 
         ok = object.hook()
         if not ok:
-            logging.debug('{:s}.{:s}.cycle : Unable to hook with object. : {!r}'.format('.'.join(('internal',__name__)), cls.__name__, object))
+            logging.debug("{:s}.cycle : Unable to hook with object. : {!r}".format('.'.join(('internal',__name__,cls.__name__)), object))
         return object
 
     def add(self, name, function, priority=50):
@@ -242,13 +248,13 @@ class priorityhook(object):
                         res = func(*args)
                     except:
                         cls = self.__class__
-                        message = functools.partial("{:s}.{:s}.callback : {:s}".format, '.'.join(('internal',__name__)), cls.__name__)
+                        message = functools.partial("{:s}.callback : {:s}".format, '.'.join(('internal',__name__,cls.__name__)))
 
-                        logging.fatal("{:s}.{:s}.callback : Callback for {:s} raised an exception.".format('.'.join(('internal',__name__)), cls.__name__, '.'.join((self.__type__.__name__,name))))
+                        logging.fatal("{:s}.callback : Callback for {:s} raised an exception.".format('.'.join(('internal',__name__,cls.__name__)), '.'.join((self.__type__.__name__,name))))
                         res = map(message, traceback.format_exception(*sys.exc_info()))
                         map(logging.fatal, res)
 
-                        logging.warn("{:s}.{:s}.callback : Hook originated from -> ".format('.'.join(('internal',__name__)), cls.__name__))
+                        logging.warn("{:s}.callback : Hook originated from -> ".format('.'.join(('internal',__name__,cls.__name__))))
                         res = map(message, traceback.format_list(self.__traceback[name,func]))
                         map(logging.warn, res)
 
@@ -428,7 +434,7 @@ class node(object):
         return id64(sup) if bit64Q else id32(sup)
 
 def tuplename(*names):
-    res = ('{:x}'.format(abs(n)) if isinstance(n, six.integer_types) else n for n in names)
+    res = ("{:x}".format(abs(n)) if isinstance(n, six.integer_types) else n for n in names)
     return '_'.join(res)
 
 # copied mostly from the collections.namedtuple template
@@ -469,8 +475,8 @@ class namedtypedtuple(tuple):
         return res(self)
 
     def __repr__(self):
-        res = ('{:s}={!r}'.format(name, value) for name,value in zip(self._fields, self))
-        return '{:s}({:s})'.format(self.__class__.__name__, ', '.join(res))
+        res = ("{:s}={!r}".format(name, value) for name,value in zip(self._fields, self))
+        return "{:s}({:s})".format(self.__class__.__name__, ', '.join(res))
 
     def _replace(self, **kwds):
         result = self._make(map(kwds.pop, self._fields, self))
@@ -494,8 +500,8 @@ class symbol_t(object):
 class regmatch(object):
     def __new__(cls, *regs, **modifiers):
         if not regs:
-            args = ', '.join(map('{:s}'.format, regs))
-            mods = ', '.join(map(internal.utils.unbox('{:s}={!r}'.format), modifiers.iteritems()))
+            args = ', '.join(map("{:s}".format, regs))
+            mods = ', '.join(map(internal.utils.unbox("{:s}={!r}".format), modifiers.iteritems()))
             raise AssertionError("{:s}({:s}{:s}) : Specified registers are empty.".format('.'.join((__name__,cls.__name__)), args, (', '+mods) if mods else ''))
         use, iterops = cls.use(regs), cls.modifier(**modifiers)
         def match(ea):
@@ -537,3 +543,71 @@ class regmatch(object):
             iterops = _instruction.ops_write
         return iterops
 
+if idaapi.BADADDR == 0xffffffff:
+    sval_t = ctypes.c_long
+elif idaapi.BADADDR == 0xffffffffffffffff:
+    sval_t = ctypes.c_longlong
+else:
+    sval_t = ctypes.c_int
+    logging.fatal("{:s} : Unable to determine size of BADADDR in order to determine boundaries of sval_t. Setting default size to {:d}-bits. : {:#x}".format(__name__, ctypes.sizeof(sval_t), idaapi.BADADDR))
+
+#Ref_Types = {
+#    0 : 'Data_Unknown', 1 : 'Data_Offset',
+#    2 : 'Data_Write', 3 : 'Data_Read', 4 : 'Data_Text',
+#    5  : 'Data_Informational',
+#    16 : 'Code_Far_Call', 17 : 'Code_Near_Call',
+#    18 : 'Code_Far_Jump', 19 : 'Code_Near_Jump',
+#    20 : 'Code_User', 21 : 'Ordinary_Flow'
+#}
+class ref_t(set):
+    F = 0
+
+    if idaapi.__version__ < 7.0:
+        __mapper__ = {
+            1 : '&r',
+            2 : 'w', 3 : 'r'
+        }
+    else:
+        __mapper__ = {
+            idaapi.fl_CF : 'rx', idaapi.fl_CN : 'rx',
+            idaapi.fl_JF : 'rx', idaapi.fl_JN : 'rx',
+            idaapi.fl_F : 'rx',
+            idaapi.dr_O : '&r', idaapi.dr_I : '&r',
+            idaapi.dr_R : 'r', idaapi.dr_W : 'w',
+        }
+    __mapper__[31] = '*'        # code 31 used internally by idascripts
+
+    def __and__(self, type):
+        return type in self
+
+    def __str__(self):
+        return str().join(sorted(self))
+    def __repr__(self):
+        return "ref_t({:s})".format(str().join(sorted(self)))
+
+    def __init__(self, type, iterable):
+        self.F = type
+        self.update(iterable)
+
+    @classmethod
+    def of(cls, xrtype):
+        res = cls.__mapper__.get(xrtype, '')
+        return cls(xrtype, res)
+    of_type = of
+
+    @classmethod
+    def of_state(cls, state):
+        if state == '*':
+            return cls(31, '*')     # code 31 used internally by idascripts
+        res = set(state)
+        for F, t in cls.__mapper__.iteritems():
+            if set(t) == res:
+                return cls(F, str().join(sorted(res)))
+            continue
+        raise LookupError("{:s}.of_state('{:s}') : Unable to find xrtype that matches requested state.".format('.'.join((__name__,cls.__name__)), str().join(sorted(res))))
+
+class AddressOpnumReftype(namedtypedtuple):
+    '''A named tuple containing (address, operand-number, reference-type).'''
+    _fields = ('address','opnum','reftype')
+    _types = (long, (types.NoneType, int), ref_t)
+OREF = AddressOpnumReftype
