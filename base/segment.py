@@ -42,7 +42,16 @@ def list(string):
     return list(like=string)
 @utils.multicase()
 def list(**type):
-    '''List all the segments defined in the database by name.'''
+    """List all the segments defined in the database.
+
+    Search type can be identified by providing a named argument.
+    like = glob match
+    regex = regular expression
+    selector = segment selector
+    index = particular index
+    name = specific segment name
+    predicate = function predicate
+    """
     res = __builtin__.list(iterate(**type))
 
     maxindex = max(__builtin__.map(operator.attrgetter('index'), res) or [1])
@@ -55,7 +64,7 @@ def list(**type):
 
     for seg in res:
         comment = idaapi.get_segment_cmt(seg, 0) or idaapi.get_segment_cmt(seg, 1)
-        print('[{:{:d}d}] {:0{:d}x}:{:0{:d}x} {:>{:d}s} {:<+#{:d}x} sel:{:04x} flags:{:02x}{:s}'.format(seg.index, int(cindex), seg.startEA, int(caddr), seg.endEA, int(caddr), idaapi.get_true_segm_name(seg), maxname, seg.size(), int(csize), seg.sel, seg.flags, '// {:s}'.format(comment) if comment else ''))
+        print("[{:{:d}d}] {:0{:d}x}:{:0{:d}x} {:>{:d}s} {:<+#{:d}x} sel:{:04x} flags:{:02x}{:s}".format(seg.index, int(cindex), seg.startEA, int(caddr), seg.endEA, int(caddr), idaapi.get_true_segm_name(seg), maxname, seg.size(), int(csize), seg.sel, seg.flags, "// {:s}".format(comment) if comment else ''))
     return
 
 ## searching
@@ -96,6 +105,35 @@ def by(ea):
 def by():
     '''Return the segment containing the current address.'''
     return by_address(ui.current.address())
+@utils.multicase()
+def by(**type):
+    """Search through all the segments within the database for a particular result.
+
+    Search type can be identified by providing a named argument.
+    like = glob match
+    regex = regular expression
+    selector = segment selector
+    index = particular index
+    name = specific segment name
+    predicate = function predicate
+    """
+    searchstring = ', '.join("{:s}={!r}".format(k,v) for k,v in type.iteritems())
+
+    res = __builtin__.list(iterate(**type))
+    if len(res) > 1:
+        maxaddr = max(__builtin__.map(operator.attrgetter('endEA'), res) or [1])
+        caddr = math.ceil(math.log(maxaddr)/math.log(16))
+        __builtin__.map(logging.info, (("[{:d}] {:0{:d}x}:{:0{:d}x} {:s} {:+#x} sel:{:04x} flags:{:02x}".format(seg.index, seg.startEA, int(caddr), seg.endEA, int(caddr), idaapi.get_true_segm_name(seg), seg.size(), seg.sel, seg.flags)) for seg in res))
+        logging.warn("{:s}.by({:s}) : Found {:d} matching results, returning the first one. : [{:d}] {:0{:d}x}:{:0{:d}x} {:s} {:+#x}".format(__name__, searchstring, len(res), res[0].index, res[0].startEA, int(caddr), res[0].endEA, int(caddr), idaapi.get_true_segm_name(res[0]), res[0].size()))
+
+    res = next(iter(res), None)
+    if res is None:
+        raise LookupError("{:s}.by({:s}) : Found 0 matching results.".format(__name__, searchstring))
+    return res
+
+def search(string):
+    '''Search through all the segments using globbing.'''
+    return by(like=string)
 
 ## properties
 @utils.multicase()
@@ -168,13 +206,13 @@ def repr():
     segment = ui.current.segment()
     if segment is None:
         raise LookupError("{:s}.repr() : Not currently positioned within a segment".format(__name__))
-    return '{:s} {:s} {:x}-{:x} (+{:x})'.format(object.__repr__(segment),idaapi.get_true_segm_name(segment),segment.startEA,segment.endEA,segment.endEA-segment.startEA)
+    return "{:s} {:s} {:x}-{:x} (+{:x})".format(object.__repr__(segment),idaapi.get_true_segm_name(segment),segment.startEA,segment.endEA,segment.endEA-segment.startEA)
 @utils.multicase()
 def repr(segment):
     '''Return a repr() of the segment identified by ``segment``.'''
     '''Given a segment_t/address, return a printable representation of it'''
     seg = by(segment)
-    return '{:s} {:s} {:x}-{:x} (+{:x})'.format(object.__repr__(seg),idaapi.get_true_segm_name(seg),seg.startEA,seg.endEA,seg.endEA-seg.startEA)
+    return "{:s} {:s} {:x}-{:x} (+{:x})".format(object.__repr__(seg),idaapi.get_true_segm_name(seg),seg.startEA,seg.endEA,seg.endEA-seg.startEA)
 
 @utils.multicase()
 def top():
@@ -340,8 +378,8 @@ def map(ea, size, newea, **kwds):
     res = idaapi.mem2base(data, newea, fpos)
     if not res:
         raise ValueError("{:s}.map({:x}, {:#x}, {:x}) : Unable to remap {:#x}:{:+#x} to {:#x}".format(__name__, ea, size, newea, ea, size, newea))
-    return create(newea, size, kwds.get('name', 'map_{:x}'.format(ea)))
-    #return create(newea, size, kwds.get('name', 'map_{:s}'.format(newea>>4)))
+    return create(newea, size, kwds.get("name', 'map_{:x}".format(ea)))
+    #return create(newea, size, kwds.get("name', 'map_{:s}".format(newea>>4)))
 
 # creation/destruction
 def new(offset, size, name, **kwds):
