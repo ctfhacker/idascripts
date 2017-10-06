@@ -3686,4 +3686,3 @@ class get(object):
                 res[m.name] = val if any(_ is None for _ in (ct,val)) else ctypes.cast(ctypes.pointer(ctypes.c_buffer(val)),ctypes.POINTER(ct)).contents
         return res
     structure = struc = struct
->>>>>>> 51d87b43ea7c68df81aee9ac626c2940975751c5
